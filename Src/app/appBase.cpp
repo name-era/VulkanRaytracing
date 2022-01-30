@@ -580,74 +580,9 @@ void AppBase::RecreateSwapChain() {
 }
 
 
-//終了時
-void AppBase::CleanupSwapChain() {
-
-    vkDestroyImageView(_device, _depthImageView, nullptr);
-    vkDestroyImage(_device, _depthImage, nullptr);
-    vkFreeMemory(_device, _depthImageMemory, nullptr);
-
-    for (auto s : _swapChainResources) {
-        vkDestroyFramebuffer(_device, s->swapChainFrameBuffer, nullptr);
-        vkDestroyImageView(_device, s->swapChainImageView, nullptr);
-        _swapChainResources.resize(0);
-    }
-
-    //コマンドバッファをクリアする
-    vkFreeCommandBuffers(_device, _commandPool, static_cast<uint32_t> (_commandBuffers.size()), _commandBuffers.data());
 
 
-    vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
-    vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
-    vkDestroyRenderPass(_device, _renderPass, nullptr);
 
-
-    vkDestroySwapchainKHR(_device, _swapChain, nullptr);
-
-
-    vkDestroyBuffer(_device, _ubo.buffer, nullptr);
-    vkFreeMemory(_device, _ubo.memory, nullptr);
-
-
-    vkDestroyDescriptorPool(_device, _descriptorPool, nullptr);
-}
-
-void AppBase::Cleanup() {
-
-    CleanupSwapChain();
-
-    //シェーダーモジュールの削除
-    vkDestroyShaderModule(_device, _vertShaderModule.handle, nullptr);
-    vkDestroyShaderModule(_device, _fragShaderModule.handle, nullptr);
-
-    //ImGui
-    CleanupImGui();
-
-    vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout.matrices, nullptr);
-    vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout.textures, nullptr);
-
-    vkDestroyBuffer(_device, _gltfVertices.buffer, nullptr);
-    vkFreeMemory(_device, _gltfVertices.memory, nullptr);
-
-    vkDestroyBuffer(_device, _gltfIndices.buffer, nullptr);
-    vkFreeMemory(_device, _gltfIndices.memory, nullptr);
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroySemaphore(_device, _renderFinishedSemaphores[i], nullptr);
-        vkDestroySemaphore(_device, _imageAvailableSemaphores[i], nullptr);
-        vkDestroyFence(_device, _inFlightFences[i], nullptr);
-    }
-
-    vkDestroyCommandPool(_device, _commandPool, nullptr);
-    vkDestroyDevice(_device, nullptr);
-
-    if (enableValidationLayers) {
-        DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);
-    }
-
-    vkDestroySurfaceKHR(_instance, _surface, nullptr);
-    vkDestroyInstance(_instance, nullptr);
-}
 
 
 
@@ -1026,18 +961,10 @@ void AppBase::CreateLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures{};
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
-
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-
-    createInfo.pEnabledFeatures = &deviceFeatures;
-
-    //VK_KHR_SWAPCHAIN_EXTENSION_NAME等のスワップチェインに必要な拡張機能を有効にする
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
@@ -1049,6 +976,44 @@ void AppBase::CreateLogicalDevice() {
     else {
         createInfo.enabledLayerCount = 0;
     }
+
+    //PhysicalDeviceが備える各種機能を使うための準備
+    //バッファのデバイスアドレスを有効にする
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bufferDeviceAddressF;
+    bufferDeviceAddressF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    bufferDeviceAddressF.bufferDeviceAddress = VK_TRUE;
+    bufferDeviceAddressF.pNext = nullptr;
+
+    //レイトレーシングパイプラインを使えるようにする
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineF;
+    rayTracingPipelineF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    rayTracingPipelineF.rayTracingPipeline = VK_TRUE;
+    rayTracingPipelineF.pNext = &bufferDeviceAddressF;
+
+    //Accelerationによるレイトレーシングを有効にする
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureF;
+    accelerationStructureF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    accelerationStructureF.accelerationStructure = VK_TRUE;
+    accelerationStructureF.pNext = &rayTracingPipelineF;
+
+    //ディスクリプタ配列を使えるようにする
+    VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingF;
+    descriptorIndexingF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptorIndexingF.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
+    descriptorIndexingF.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    descriptorIndexingF.runtimeDescriptorArray = VK_TRUE;
+    descriptorIndexingF.descriptorBindingVariableDescriptorCount = VK_TRUE;
+    descriptorIndexingF.descriptorBindingPartiallyBound = VK_TRUE;
+    descriptorIndexingF.pNext = &accelerationStructureF;
+
+    VkPhysicalDeviceFeatures features{};
+    vkGetPhysicalDeviceFeatures(_physicalDevice, &features);
+    VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
+    physicalDeviceFeatures2.features = features;
+    physicalDeviceFeatures2.pNext = &descriptorIndexingF;
+
+    createInfo.pNext = &physicalDeviceFeatures2;
+    createInfo.pEnabledFeatures = nullptr;
 
     if (vkCreateDevice(_physicalDevice, &createInfo, nullptr, &_device) != VK_SUCCESS) {
         throw std::runtime_error("failed to create logical device!");
@@ -1312,7 +1277,69 @@ void AppBase::CleanupWindow() {
     glfwTerminate();
 }
 
+void AppBase::CleanupSwapChain() {
 
+    vkDestroyImageView(_device, _depthImageView, nullptr);
+    vkDestroyImage(_device, _depthImage, nullptr);
+    vkFreeMemory(_device, _depthImageMemory, nullptr);
+
+    for (auto s : _swapChainResources) {
+        vkDestroyFramebuffer(_device, s->swapChainFrameBuffer, nullptr);
+        vkDestroyImageView(_device, s->swapChainImageView, nullptr);
+        _swapChainResources.resize(0);
+    }
+
+    //コマンドバッファをクリアする
+    vkFreeCommandBuffers(_device, _commandPool, static_cast<uint32_t> (_commandBuffers.size()), _commandBuffers.data());
+
+
+    vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
+    vkDestroyRenderPass(_device, _renderPass, nullptr);
+
+
+    vkDestroySwapchainKHR(_device, _swapChain, nullptr);
+
+
+    vkDestroyBuffer(_device, _ubo.buffer, nullptr);
+    vkFreeMemory(_device, _ubo.memory, nullptr);
+
+
+    vkDestroyDescriptorPool(_device, _descriptorPool, nullptr);
+}
+
+void AppBase::Cleanup() {
+
+    CleanupSwapChain();
+
+    //ImGui
+    CleanupImGui();
+
+    vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout.matrices, nullptr);
+    vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout.textures, nullptr);
+
+    vkDestroyBuffer(_device, _gltfVertices.buffer, nullptr);
+    vkFreeMemory(_device, _gltfVertices.memory, nullptr);
+
+    vkDestroyBuffer(_device, _gltfIndices.buffer, nullptr);
+    vkFreeMemory(_device, _gltfIndices.memory, nullptr);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroySemaphore(_device, _renderFinishedSemaphores[i], nullptr);
+        vkDestroySemaphore(_device, _imageAvailableSemaphores[i], nullptr);
+        vkDestroyFence(_device, _inFlightFences[i], nullptr);
+    }
+
+    vkDestroyCommandPool(_device, _commandPool, nullptr);
+    vkDestroyDevice(_device, nullptr);
+
+    if (enableValidationLayers) {
+        DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);
+    }
+
+    vkDestroySurfaceKHR(_instance, _surface, nullptr);
+    vkDestroyInstance(_instance, nullptr);
+}
 
 
 

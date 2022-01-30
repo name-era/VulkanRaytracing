@@ -405,16 +405,6 @@ public:
     //スワップチェーンを再構成する
     void RecreateSwapChain();
 
-
-
-    //終了時
-
-    //スワップチェーンのリソースを開放する
-    void CleanupSwapChain();
-
-    //リソースを破棄する
-    void Cleanup();
-
     //Mipmapg画像を作成する
     void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
 
@@ -423,10 +413,23 @@ public:
 
 
 
+
+
+
     /**
     * @brief    ウィンドウの破棄
     */
     void CleanupWindow();
+
+    /**
+    * @brief    スワップチェーンのリソースを開放する
+    */
+    void CleanupSwapChain();
+
+    /**
+    * @brief    リソースを破棄する
+    */
+    void Cleanup();
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;
@@ -440,7 +443,14 @@ public:
     };
 
     const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        //Vulkan Raytracing API で必要.
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        //VK_KHR_acceleration_structureで必要
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, 
+        //descriptor indexing に必要
+        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
     };
 
 
