@@ -16,29 +16,6 @@ AppBase::AppBase() :
 
 
 
-
-
-
-
-
-
-
-
-void AppBase::CreateCommandPool() {
-
-    QueueFamilyIndices queueFamilyIndices = FindQueueFamilyIndex(_physicalDevice);
-
-    VkCommandPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
-
-    if (vkCreateCommandPool(_device, &poolInfo, nullptr, &_commandPool) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create graphics command pool!");
-    }
-}
-
-
-
 void AppBase::CreateDepthResources() {
 
     VkFormat depthFormat = FindDepthFormat();
@@ -383,21 +360,6 @@ void AppBase::RecreateSwapChain() {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*******************************************************************************************************************
 *                                             コールバック
 ********************************************************************************************************************/
@@ -648,31 +610,6 @@ void AppBase::PickupPhysicalDevice() {
     if (_physicalDevice == VK_NULL_HANDLE) {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
-}
-
-VkFormat AppBase::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
-    for (VkFormat format : candidates) {
-        VkFormatProperties props;
-        vkGetPhysicalDeviceFormatProperties(_physicalDevice, format, &props);
-
-        if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
-            return format;
-        }
-        else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
-            return format;
-        }
-    }
-
-    throw std::runtime_error("failed to find supported format!");
-}
-
-VkFormat AppBase::FindDepthFormat() {
-    //深度フォーマット候補
-    return FindSupportedFormat(
-        { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
-    );
 }
 
 void AppBase::CreateRenderPass() {

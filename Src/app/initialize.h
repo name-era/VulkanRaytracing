@@ -6,17 +6,10 @@
 
 #include <vulkan/vulkan.h>
 
-struct VulkanDevice {
+struct Initialize {
 public:
 
-    struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsFamily;
-        std::optional<uint32_t> presentFamily;
 
-        bool isComplete() {
-            return graphicsFamily.has_value() && presentFamily.has_value();
-        }
-    };
 
 
     const std::vector<const char*> deviceExtensions = {
@@ -33,12 +26,12 @@ public:
     /**
     * @brief    コンストラクタ
     */
-    VulkanDevice();
+    Initialize();
 
     /**
     * @brief    デストラクタ
     */
-    ~VulkanDevice();
+    ~Initialize();
 
 
 
@@ -109,9 +102,6 @@ public:
 
 
 
-    VkQueue _graphicsQueue;
-    VkQueue _presentQueue;
-    VkPhysicalDevice _physicalDevice;
-    VkDevice _device;
+
 
 };
