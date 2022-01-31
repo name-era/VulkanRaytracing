@@ -33,15 +33,7 @@ class AppBase
 {
 public:
 
-    struct UniformBufferObject {
-        VkBuffer buffer;
-        VkDeviceMemory memory;
-        struct Values {
-            glm::mat4 projection;
-            glm::mat4 model;
-            glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, -5.0f, 1.0f);
-        } values;
-    };
+
 
 
 
@@ -118,15 +110,6 @@ public:
     void PickupPhysicalDevice();
 
 
-    /**
-    * @brief    サポートしているフォーマットを見つける
-    */
-    VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
-
-    /**
-    * @brief    深度フォーマットを見つける
-    */
-    VkFormat FindDepthFormat();
 
     /**
     * @brief    レンダーパスを作成する
@@ -183,9 +166,6 @@ public:
 
 
 
-
-    //コマンドプールを作成する
-    void CreateCommandPool();
 
 
     //深度リソースを作成する
@@ -303,10 +283,8 @@ public:
     float frameTimer = 1.0f;
 
 
-
-    VulkanDevice* _vulkanDevice;
     Swapchain* _swapchain;
-    gltf* _gltf;
+    glTF* _gltf;
 
 
     VkDevice _device;

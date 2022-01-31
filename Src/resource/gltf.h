@@ -11,6 +11,7 @@
 #include <tiny_gltf.h>
 
 #include "device.h"
+#include "shader.h"
 
 class glTF {
 public:
@@ -120,8 +121,8 @@ public:
 
     struct glTFMaterial {
         glm::vec4 baseColorFactor = glm::vec4(1.0f);
-        uint32_t baseColorTexture;
         Texture* baseColorTexture = nullptr;
+        VkDescriptorSet descriptorSet;
     };
 
     struct Primitive {
@@ -130,11 +131,30 @@ public:
         int32_t materialIndex;
     };
 
+    struct UniformBuffer {
+        VkBuffer buffer;
+        VkDeviceMemory memory;
+        VkDescriptorSet descriptorSet;
+    };
+
+    struct UniformBlock {
+        glm::mat4 projection;
+        glm::mat4 model;
+        glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, -5.0f, 1.0f);
+    };
+
     struct Node {
         Node* parent;
         std::vector<Node> children;
-        std::vector<Primitive> mesh;
+        std::vector<Primitive> primitive;
+        UniformBuffer ubo;
+        UniformBlock uniformBlock;
         glm::mat4 matrix;
+    };
+
+    struct DescriptorLayouts {
+        VkDescriptorSetLayout matrix;
+        VkDescriptorSetLayout texture;
     };
 
 
@@ -155,17 +175,40 @@ public:
     void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
     void LoadFromFile(std::string filename, VulkanDevice* device);
 
+
+    void CreateDescriptorsets(Shader* shader);
+
+    /**
+    * @brief    ディスクリプタプールの作成
+    */
+    void CreateDescriptorPool(uint32_t shaderIndex);
+
+    /**
+    * @brief    ディスクリプタレイアウトの作成
+    */
+    void CreateDescriptorSetLayout();
+
+    /**
+    * @brief    ディスクリプタセットを作成する
+    */
+    void CreateDescriptorSets(uint32_t shaderIndex);
+
+
 private:
     std::vector<Texture> _textures;
-    std::vector<glTFMaterial> _gltfMaterials;
-    std::vector<Node> _gltfNodes;
+    std::vector<glTFMaterial> _materials;
+    std::vector<Node> _nodes;
 
     Vertices _vertices;
     Indices _indices;
 
     VulkanDevice* _vulkanDevice;
+    Shader* _shader;
+
     uint32_t _mipLevel;
     VkQueue _queue;
+    DescriptorLayouts _descriptorSetLayout;
+    VkDescriptorPool _descriptorPool;
 
 
 };

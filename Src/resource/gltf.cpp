@@ -238,18 +238,18 @@ glTF::Texture* glTF::GetTexture(uint32_t index) {
 
 void glTF::LoadglTFMaterials(tinygltf::Model& input) {
 
-    _gltfMaterials.resize(input.materials.size());
+    _materials.resize(input.materials.size());
 
     for (size_t i = 0; i < input.materials.size(); i++) {
         tinygltf::Material material = input.materials[i];
         //baseColor
         if (material.values.find("baseColorFactor") != material.values.end()) {
-            _gltfMaterials[i].baseColorFactor = glm::make_vec4(material.values["baseColorFactor"].ColorFactor().data());
+            _materials[i].baseColorFactor = glm::make_vec4(material.values["baseColorFactor"].ColorFactor().data());
 
         }
         //texture
         if (material.values.find("baseColorTexture") != material.values.end()) {
-            _gltfMaterials[i].baseColorTexture = GetTexture(input.textures[material.values["baseColorTexture"].TextureIndex()].source);
+            _materials[i].baseColorTexture = GetTexture(input.textures[material.values["baseColorTexture"].TextureIndex()].source);
 
         }
     }
@@ -366,14 +366,14 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
             primitive.firstIndex = firstIndex;
             primitive.indexCount = indexCount;
             primitive.materialIndex = glTFPrimitive.material;
-            node.mesh.push_back(primitive);
+            node.primitive.push_back(primitive);
         }
     }
     if (parent) {
         parent->children.push_back(node);
     }
     else {
-        _gltfNodes.push_back(node);
+        _nodes.push_back(node);
     }
 }
 
@@ -438,4 +438,136 @@ void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
 
     vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
+}
+
+void glTF::CreateDescriptorsets(Shader* shader) {
+    _shader = shader;
+}
+
+void glTF::CreateDescriptorPool(uint32_t shaderIndex) {
+
+    uint32_t imageCount = 0;
+    uint32_t uboCount = 0;
+
+    std::vector<VkDescriptorPoolSize> poolSizes{};
+    poolSizes.push_back({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , uboCount });
+    if (imageCount > 0) {
+        poolSizes.push_back({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER , imageCount });
+    }
+
+    for (auto material : _materials) {
+        if (material.baseColorTexture != nullptr) {
+            imageCount++;
+        }
+    }
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = imageCount + uboCount;
+
+    if (vkCreateDescriptorPool(_vulkanDevice->_device, &poolInfo, nullptr, &_descriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor pool!");
+    }
+}
+
+void glTF::CreateDescriptorSetLayout() {
+
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo uboLayoutInfo{};
+    uboLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    uboLayoutInfo.bindingCount = 1;
+    uboLayoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(_vulkanDevice->_device, &uboLayoutInfo, nullptr, &_descriptorSetLayout.matrix) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor set layout!");
+    }
+
+    VkDescriptorSetLayoutBinding samplerBinding{};
+    samplerBinding.binding = 1;
+    samplerBinding.descriptorCount = 1;
+    samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    samplerBinding.pImmutableSamplers = nullptr;
+    samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo imageLayoutInfo{};
+    imageLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    imageLayoutInfo.bindingCount = 1;
+    imageLayoutInfo.pBindings = &samplerBinding;
+
+    if (vkCreateDescriptorSetLayout(_vulkanDevice->_device, &uboLayoutInfo, nullptr, &_descriptorSetLayout.texture) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor set layout!");
+    }
+}
+
+void glTF::CreateDescriptorSets(uint32_t shaderIndex) {
+
+    for (auto node : _nodes) {
+
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = _descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &_descriptorSetLayout.matrix;
+
+        if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &node.ubo.descriptorSet) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate descriptor sets!");
+        }
+
+        VkWriteDescriptorSet descriptorWrite{};
+
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = node.ubo.buffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBlock);
+
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = node.ubo.descriptorSet;
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+
+        vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWrite, 0, nullptr);
+    }
+
+    //テクスチャ用
+    for (auto& material : _materials) {
+        if (material.baseColorTexture != nullptr) {
+            
+            VkDescriptorSetAllocateInfo allocInfoMaterial{};
+            allocInfoMaterial.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfoMaterial.descriptorPool = _descriptorPool;
+            allocInfoMaterial.descriptorSetCount = 1;
+            allocInfoMaterial.pSetLayouts = &_descriptorSetLayout.texture;
+
+            if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfoMaterial, &material.descriptorSet) != VK_SUCCESS) {
+                throw std::runtime_error("failed to allocate descriptor sets!");
+            }
+
+            VkDescriptorImageInfo imageInfo{};
+            
+            imageInfo.imageView = material.baseColorTexture->textureImageView;
+            imageInfo.sampler = material.baseColorTexture->textureSampler;
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            VkWriteDescriptorSet descriptorWriteMaterial{};
+            descriptorWriteMaterial.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWriteMaterial.dstSet = material.descriptorSet;
+            descriptorWriteMaterial.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWriteMaterial.dstBinding = 0;
+            descriptorWriteMaterial.pImageInfo = &imageInfo;
+            descriptorWriteMaterial.descriptorCount = 1;
+
+            vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWriteMaterial, 0, nullptr);
+        }
+    }
 }
