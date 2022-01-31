@@ -119,6 +119,9 @@ void VulkanDevice::CreateLogicalDevice() {
     if (vkCreateDevice(_physicalDevice, &createInfo, nullptr, &_device) != VK_SUCCESS) {
         throw std::runtime_error("failed to create logical device!");
     }
+
+    vkGetDeviceQueue(_device, _queueFamilyIndices.graphics, 0, &_graphicsQueue);
+    vkGetDeviceQueue(_device, _queueFamilyIndices.graphics, 0, &_presentQueue);
 }
 
 bool VulkanDevice::CheckDeviceExtensionSupport(VkPhysicalDevice device) {

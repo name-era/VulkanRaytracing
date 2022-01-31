@@ -18,7 +18,6 @@ const uint32_t HEIGHT = 720;
 #include <stdexcept>
 #include <vector>
 #include <iostream>
-
 #include <array>
 #include <chrono>
 #include <unordered_map>
@@ -28,6 +27,7 @@ const uint32_t HEIGHT = 720;
 #include "initialize.h"
 #include "swapchain.h"
 #include "gltf.h"
+#include "gui.h"
 
 class AppBase
 {
@@ -130,7 +130,7 @@ public:
     VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 
     /**
-    * @brief    デプスリソースを作成する
+    * @brief    深度リソースを作成する
     */
     void CreateDepthResources();
 
@@ -211,6 +211,8 @@ public:
     Swapchain* _swapchain;
     Shader* _shader;
     glTF* _gltf;
+    Gui* _gui;
+
 
     GLFWwindow* _window;
     VkInstance _instance;
@@ -233,7 +235,6 @@ public:
 
 
     std::vector<VkCommandBuffer> _commandBuffers;
-    const int MAX_FRAMES_IN_FLIGHT;
     std::vector<VkSemaphore> _imageAvailableSemaphores;
     std::vector<VkSemaphore> _renderFinishedSemaphores;
     std::vector<VkFence> _inFlightFences;
@@ -246,11 +247,7 @@ public:
 
     
 
-    float _angle = 0.f;
-    float _cmeraPosX = 2.0f;
-    float _cameraPosY = 2.0f;
-    float _cameraPsZ = 2.0f;
-    float _color[4];
+
 
 
     //カメラの動き

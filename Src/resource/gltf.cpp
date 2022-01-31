@@ -213,8 +213,8 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* dev
     }
 
 
-    PrepareImage(buffer, bufferSize, VK_FORMAT_R8G8B8A8_UNORM, gltfImage.width, gltfImage.height);
-    CreateImageView(textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
+    PrepareImage(buffer, bufferSize, COLORFORMAT, gltfImage.width, gltfImage.height);
+    CreateImageView(textureImage, COLORFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
     CreateSampler();
 
     if (deleteBuffer) {

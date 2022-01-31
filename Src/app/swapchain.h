@@ -68,7 +68,10 @@ public:
 
     VkExtent2D _extent;
     uint32_t _imageCount;
-    std::vector<SwapchianBuffer> _swapchainResources;
+    uint32_t _minImageCount;
+    VkFormat _colorFormat;
+    std::vector<SwapchianBuffer> _swapchainBuffers;
+    VkSwapchainKHR _swapchain;
 
 private:
     GLFWwindow* _window;
@@ -77,6 +80,6 @@ private:
     VkPhysicalDevice _physicalDevice;
     VkSurfaceKHR _surface;
 
-    VkSwapchainKHR _swapchain;
-    VkFormat _colorFormat;
+    
+
 };

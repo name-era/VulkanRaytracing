@@ -92,6 +92,8 @@ void Swapchain::CreateSwapChain() {
         _imageCount = swapChainSupport.capabilities.maxImageCount;
     }
 
+    _minImageCount = swapChainSupport.capabilities.minImageCount;
+
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     createInfo.surface = _surface;
@@ -121,9 +123,9 @@ void Swapchain::CreateSwapChain() {
     swapchainImages.resize(_imageCount);
     vkGetSwapchainImagesKHR(_device, _swapchain, &_imageCount, swapchainImages.data());
 
-    _swapchainResources.resize(_imageCount);
+    _swapchainBuffers.resize(_imageCount);
     for (uint32_t i = 0; i < _imageCount; i++) {
-        _swapchainResources[i].image = swapchainImages[i];
+        _swapchainBuffers[i].image = swapchainImages[i];
     }
 
     _colorFormat = surfaceFormat.format;
@@ -133,7 +135,7 @@ void Swapchain::CreateSwapChain() {
     for (uint32_t i = 0; i < _imageCount; i++) {
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = _swapchainResources[i].image;
+        viewInfo.image = _swapchainBuffers[i].image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = _colorFormat;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -142,7 +144,7 @@ void Swapchain::CreateSwapChain() {
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(_device, &viewInfo, nullptr, &_swapchainResources[i].imageview) != VK_SUCCESS) {
+        if (vkCreateImageView(_device, &viewInfo, nullptr, &_swapchainBuffers[i].imageview) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture image view!");
         }
     }
@@ -151,7 +153,7 @@ void Swapchain::CreateSwapChain() {
 void Swapchain::Cleanup() {
     if (_swapchain != VK_NULL_HANDLE) {
         for (uint32_t i = 0; i < _imageCount; i++) {
-            vkDestroyImageView(_device, _swapchainResources[i].imageview, nullptr);
+            vkDestroyImageView(_device, _swapchainBuffers[i].imageview, nullptr);
         }
     }
 

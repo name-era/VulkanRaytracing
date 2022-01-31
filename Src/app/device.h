@@ -1,5 +1,8 @@
 #pragma once
 
+#define COLORFORMAT VK_FORMAT_R8G8B8A8_UNORM
+#define MAX_FRAMES_IN_FLIGHT 2
+
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -104,4 +107,12 @@ struct VulkanDevice {
     VkPhysicalDeviceMemoryProperties _memProperties;
     std::vector<VkQueueFamilyProperties> _queueFamilyProperties;
     VkCommandPool _commandPool;
+    VkQueue _graphicsQueue;
+    VkQueue _presentQueue;
+
+    float _angle = 0.f;
+    float _cmeraPosX = 2.0f;
+    float _cameraPosY = 2.0f;
+    float _cameraPsZ = 2.0f;
+    float _color[4];
 };

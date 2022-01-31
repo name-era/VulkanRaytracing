@@ -27,8 +27,6 @@ void AppBase::UpdateUniformBuffer() {
 
 void AppBase::drawFrame() {
 
-    PrepareRenderingImGui();
-
     //画像が取得されてレンダリングの準備ができたセマフォ
     vkWaitForFences(_device, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -48,8 +46,6 @@ void AppBase::drawFrame() {
     if (_imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
         vkWaitForFences(_device, 1, &_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
     }
-
-    RenderImGui(imageIndex);
 
     _imagesInFlight[imageIndex] = _inFlightFences[_currentFrame];
 
@@ -181,8 +177,6 @@ void AppBase::RecreateSwapChain() {
     i_commandBuffers.resize(_swapChainResources.size());
     CreateCommandBuffersForImGui(i_commandBuffers.data(), static_cast<uint32_t>(i_commandBuffers.size()), i_commandPool);
 }
-
-
 
 
 /*******************************************************************************************************************
@@ -439,7 +433,7 @@ void AppBase::PickupPhysicalDevice() {
 
 void AppBase::CreateRenderPass() {
     VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+    colorAttachment.format = COLORFORMAT;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -699,7 +693,7 @@ void AppBase::CreateFramebuffers() {
     for (size_t i = 0; i < _swapchain->_imageCount; i++) {
         
         std::array<VkImageView, 2> attachments = {
-            _swapchain->_swapchainResources[i].imageview,
+            _swapchain->_swapchainBuffers[i].imageview,
             _depthImageView
         };
 
@@ -828,20 +822,8 @@ void AppBase::Initialize() {
     CreateCommandBuffers();
     CreateSyncObjects();
 
-
     _gui = new Gui();
-    //guiの準備
-    ////ImGui
-    //CreateRenderPassForImGui();
-    ////後でCreateCommandPool()とまとめる
-    //CreateCommandPoolForImGui(&i_commandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    //CreateFrameBuffersForImGui();
-    //i_commandBuffers.resize(_swapChainResources.size());
-    //CreateCommandBuffersForImGui(i_commandBuffers.data(), static_cast<uint32_t>(i_commandBuffers.size()), i_commandPool);
-    //PrepareImGui();
-
-
-
+    _gui->PrepareImGui(_window, _instance);
 }
 
 
