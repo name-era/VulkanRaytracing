@@ -18,97 +18,20 @@ const uint32_t HEIGHT = 720;
 #include <stdexcept>
 #include <vector>
 #include <iostream>
-#include <optional>
-#include <set>
-#include <algorithm>
+
 #include <array>
 #include <chrono>
 #include <unordered_map>
 
 
 #include "camera.h"
+#include "initialize.h"
+#include "swapchain.h"
 #include "gltf.h"
-#include "shader.h"
-#include "gui.h"
 
 class AppBase
 {
 public:
-
-    struct Vertex {
-        glm::vec3 pos;
-        glm::vec3 normal;
-        glm::vec2 uv;
-        glm::vec3 color;
-
-        static VkVertexInputBindingDescription getBindingDescription() {
-            VkVertexInputBindingDescription bindingDescription{};
-            bindingDescription.binding = 0;
-            bindingDescription.stride = sizeof(Vertex);
-            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-            return bindingDescription;
-        }
-
-
-        static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
-
-            std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
-
-            attributeDescriptions[0].binding = 0;
-            attributeDescriptions[0].location = 0;
-            attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-            attributeDescriptions[1].binding = 0;
-            attributeDescriptions[1].location = 1;
-            attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[1].offset = offsetof(Vertex, normal);
-
-            attributeDescriptions[2].binding = 0;
-            attributeDescriptions[2].location = 2;
-            attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[2].offset = offsetof(Vertex, uv);
-
-            attributeDescriptions[3].binding = 0;
-            attributeDescriptions[3].location = 3;
-            attributeDescriptions[3].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[3].offset = offsetof(Vertex, color);
-
-            return attributeDescriptions;
-        }
-    };
-
-
-
-    struct Vertices {
-        VkBuffer buffer;
-        VkDeviceMemory memory;
-    };
-
-    struct Indices {
-        int count;
-        VkBuffer buffer;
-        VkDeviceMemory memory;
-    };
-
-    struct Primitive {
-        uint32_t firstIndex;
-        uint32_t indexCount;
-        int32_t materialIndex;
-    };
-
-    struct Mesh {
-        std::vector<Primitive> primitives;
-    };
-
-    struct Node {
-        Node* parent;
-        std::vector<Node> children;
-        Mesh mesh;
-        glm::mat4 matrix;
-    };
-
 
     struct UniformBufferObject {
         VkBuffer buffer;
@@ -122,12 +45,6 @@ public:
 
 
 
-    struct swapChainResource
-    {
-        VkImage swapChainImage;
-        VkImageView swapChainImageView;
-        VkFramebuffer swapChainFrameBuffer;
-    };
 
     struct {
         bool left = false;
@@ -135,24 +52,6 @@ public:
         bool middle = false;
     } mouseButtons;
 
-    struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsFamily;
-        std::optional<uint32_t> presentFamily;
-
-        bool isComplete() {
-            return graphicsFamily.has_value() && presentFamily.has_value();
-        }
-    };
-
-
-    struct SwapChainSupportDetails {
-        //基本的な表面機能（スワップチェーン内の画像の最小最大数、画像の最小最大幅と高さ）
-        VkSurfaceCapabilitiesKHR capabilities;
-        //表面フォーマット（ピクセルフォーマット、色空間）
-        std::vector<VkSurfaceFormatKHR> formats;
-        //利用可能なプレゼンテーションモード
-        std::vector<VkPresentModeKHR> presentModes;
-    };
 
     bool _framebufferResized;
 
@@ -214,69 +113,10 @@ public:
     void SetupDebugMessenger();
 
     /**
-    * @brief    サーフェスを作る
-    */
-    void CreateSurface();
-
-    /**
-    * @brief    キューファミリを見つける
-    */
-    QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
-
-    /**
-    * @brief    デバイスの拡張をチェックする
-    */
-    bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
-
-    /**
-    * @brief    スワップチェインをサポートしているか確認する
-    */
-    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
-
-    /**
-    * @brief    デバイスが使えるか確認する
-    */
-    bool IsDeviceSuitable(VkPhysicalDevice device);
-
-    /**
     * @brief    物理デバイスを取得する
     */
     void PickupPhysicalDevice();
 
-    /**
-    * @brief    論理デバイスを取得する
-    */
-    void CreateLogicalDevice();
-
-    /**
-    * @brief    スワップチェーンのサーフェスフォーマットを選択する
-    */
-    VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-
-    /**
-    * @brief    スワップチェーンの表示モードを選択する
-    */
-    VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
-
-    /**
-    * @brief    スワップチェーンの範囲を選択する
-    */
-    VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-
-    /**
-    * @brief    スワップチェーンを作成する
-    */
-    void CreateSwapChain();
-
-    /**
-    * @brief    イメージビューを作成する
-    */
-    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
-
-    /**
-    * @brief    イメージビューを作成する
-    */
-    void CreateSwapChainImageViews();
 
     /**
     * @brief    サポートしているフォーマットを見つける
@@ -347,20 +187,12 @@ public:
     //コマンドプールを作成する
     void CreateCommandPool();
 
-    //画像作成
-    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 
     //深度リソースを作成する
     void CreateDepthResources();
 
     //フレームバッファを作成する
     void CreateFramebuffers();
-
-    //メモリタイプを探す
-    uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-
-    //抽象バッファを作成する
-    void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 
     //ユニフォームバッファを作成する
     void CreateUniformBuffers();
@@ -375,23 +207,10 @@ public:
     //同期オブジェクトを作成する
     void CreateSyncObjects();
 
-    //コマンドバッファの記録開始
-    VkCommandBuffer BeginSingleTimeCommands();
 
-    //コマンドバッファの記録終了
-    void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
-
-    //テクスチャ画像を作成する
-    void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
-
-    //バッファを画像にコピーする
-    void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-
-    //バッファをコピーする
-    void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-
-
-    //毎フレーム
+    /*******************************************************************************************************************
+    *                                             ループ内
+    ********************************************************************************************************************/
 
     //ユニフォームバッファを更新する
     void UpdateUniformBuffer();
@@ -442,39 +261,12 @@ public:
         "VK_LAYER_KHRONOS_validation"
     };
 
-    const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        //Vulkan Raytracing API で必要.
-        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-        //VK_KHR_acceleration_structureで必要
-        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, 
-        //descriptor indexing に必要
-        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-    };
-
-
 
     GLFWwindow* _window;
     VkInstance _instance;
-    VkDebugUtilsMessengerEXT _debugMessenger;
-    VkSurfaceKHR _surface;
-    VkPhysicalDevice _physicalDevice;
-    VkDevice _device;
 
 
 
-
-
-    VkQueue _graphicsQueue;
-    VkQueue _presentQueue;
-
-
-    //スワップチェーン関連
-    VkSwapchainKHR _swapChain;
-    VkFormat _swapChainImageFormat;
-    VkExtent2D _swapChainExtent;
-    std::vector<swapChainResource*> _swapChainResources;
 
 
 
@@ -512,8 +304,12 @@ public:
 
 
 
+    VulkanDevice* _vulkanDevice;
+    Swapchain* _swapchain;
     gltf* _gltf;
-    Shader* _shader;
-    Gui* _gui;
 
+
+    VkDevice _device;
+    VkPhysicalDevice _physicalDevice;
+    VkRenderPass _renderPass;
 };

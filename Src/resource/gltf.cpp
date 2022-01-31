@@ -1,23 +1,30 @@
 #include "gltf.h"
 
+gltf::gltf(VulkanDevice& vulkanDevice) {
+    _vulkanFunc = &vulkanDevice;
+    _device = _vulkanFunc->_device;
+    _physicalDevice = _vulkanFunc->_physicalDevice;
+}
+
 void gltf::CreateglTFImage(glTFImage* image, void* buffer, VkDeviceSize bufferSize, VkFormat format, uint32_t texWidth, uint32_t texHeight) {
 
-    _mipLevels = 1;
+    _mipLevel = 1;
 
+    
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
-    CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
+    _vulkanFunc->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+    
     //ステージバッファにテクスチャのデータを送る
     void* data;
-    vkMapMemory(_device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    vkMapMemory(_vulkanFunc->_device, stagingBufferMemory, 0, bufferSize, 0, &data);
     memcpy(data, buffer, bufferSize);
-    vkUnmapMemory(_device, stagingBufferMemory);
+    vkUnmapMemory(_vulkanFunc->_device, stagingBufferMemory);
 
-    CreateImage(texWidth, texHeight, _mipLevels, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image->textureImage, image->textureImageMemory);
-    TransitionImageLayout(image->textureImage, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, _mipLevels);
-    CopyBufferToImage(stagingBuffer, image->textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    TransitionImageLayout(image->textureImage, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _mipLevels);
+    _vulkanFunc->CreateImage(texWidth, texHeight, _mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image->textureImage, image->textureImageMemory);
+    _vulkanFunc->TransitionImageLayout(image->textureImage, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, _mipLevel);
+    _vulkanFunc->CopyBufferToImage(stagingBuffer, image->textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    _vulkanFunc->TransitionImageLayout(image->textureImage, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _mipLevel);
 
     vkDestroyBuffer(_device, stagingBuffer, nullptr);
     vkFreeMemory(_device, stagingBufferMemory, nullptr);
@@ -25,7 +32,7 @@ void gltf::CreateglTFImage(glTFImage* image, void* buffer, VkDeviceSize bufferSi
 }
 
 void gltf::CreateglTFImageView(glTFImage* image, VkFormat format) {
-    image->textureImageView = CreateImageView(image->textureImage, format, VK_IMAGE_ASPECT_COLOR_BIT, _mipLevels);
+    image->textureImageView = _vulkanFunc->CreateImageView(image->textureImage, format, VK_IMAGE_ASPECT_COLOR_BIT, _mipLevel);
 }
 
 void gltf::CreateglTFSampler(glTFImage* image) {
@@ -36,7 +43,6 @@ void gltf::CreateglTFSampler(glTFImage* image) {
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
     samplerInfo.minFilter = VK_FILTER_LINEAR;
-    //画像のサイズを超える場合は、テクスチャを繰り返す
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -48,7 +54,7 @@ void gltf::CreateglTFSampler(glTFImage* image) {
     samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = static_cast<float>(_mipLevels);
+    samplerInfo.maxLod = static_cast<float>(_mipLevel);
     samplerInfo.mipLodBias = 0.0f;
 
     if (vkCreateSampler(_device, &samplerInfo, nullptr, &image->textureSampler) != VK_SUCCESS) {
@@ -117,7 +123,7 @@ void gltf::LoadglTFMaterials(tinygltf::Model& input) {
 void gltf::LoadglTFTextures(tinygltf::Model& input) {
     _gltfTextures.resize(input.textures.size());
     for (size_t i = 0; i < input.textures.size(); i++) {
-        _gltfTextures[i].imageIndex = input.textures[i].source;
+        _gltfTextures[i] = input.textures[i].source;
     }
 }
 
@@ -235,7 +241,7 @@ void gltf::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
             primitive.firstIndex = firstIndex;
             primitive.indexCount = indexCount;
             primitive.materialIndex = glTFPrimitive.material;
-            node.mesh.primitives.push_back(primitive);
+            node.mesh.push_back(primitive);
         }
     }
     if (parent) {
@@ -279,17 +285,17 @@ void gltf::LoadglTF(std::string filename) {
 
     Vertices vertexStaging;
 
-
-    CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vertexStaging.buffer, vertexStaging.memory);
-
+    
+    _vulkanFunc->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vertexStaging.buffer, vertexStaging.memory);
+    
     void* data;
     vkMapMemory(_device, vertexStaging.memory, 0, vertexBufferSize, 0, &data);
     memcpy(data, vertexBuffer.data(), (size_t)vertexBufferSize);
     vkUnmapMemory(_device, vertexStaging.memory);
 
-    CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _gltfVertices.buffer, _gltfVertices.memory);
+    _vulkanFunc->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _gltfVertices.buffer, _gltfVertices.memory);
 
-    CopyBuffer(vertexStaging.buffer, _gltfVertices.buffer, vertexBufferSize);
+    _vulkanFunc->CopyBuffer(vertexStaging.buffer, _gltfVertices.buffer, vertexBufferSize);
 
     vkDestroyBuffer(_device, vertexStaging.buffer, nullptr);
     vkFreeMemory(_device, vertexStaging.memory, nullptr);
@@ -302,20 +308,18 @@ void gltf::LoadglTF(std::string filename) {
 
     Vertices indexStaging;
 
-    CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, indexStaging.buffer, indexStaging.memory);
+    _vulkanFunc->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, indexStaging.buffer, indexStaging.memory);
 
     vkMapMemory(_device, indexStaging.memory, 0, indexBufferSize, 0, &data);
     memcpy(data, indexBuffer.data(), (size_t)indexBufferSize);
     vkUnmapMemory(_device, indexStaging.memory);
 
-    CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _gltfIndices.buffer, _gltfIndices.memory);
+    _vulkanFunc->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _gltfIndices.buffer, _gltfIndices.memory);
 
-    CopyBuffer(indexStaging.buffer, _gltfIndices.buffer, indexBufferSize);
+    _vulkanFunc->CopyBuffer(indexStaging.buffer, _gltfIndices.buffer, indexBufferSize);
 
     vkDestroyBuffer(_device, indexStaging.buffer, nullptr);
     vkFreeMemory(_device, indexStaging.memory, nullptr);
-
-
 }
 
 uint32_t gltf::getImageNum() {
