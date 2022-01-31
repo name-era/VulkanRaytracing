@@ -24,27 +24,27 @@ void glTF::Texture::CreateImage(uint32_t width, uint32_t height, uint32_t mipLev
         imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
 
-    if (vkCreateImage(s_vulkanDevice->_device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+    if (vkCreateImage(vulkanDevice->_device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
         throw std::runtime_error("failed to create image!");
     }
 
     VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(s_vulkanDevice->_device, image, &memRequirements);
+    vkGetImageMemoryRequirements(vulkanDevice->_device, image, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = s_vulkanDevice->FindMemoryType(memRequirements.memoryTypeBits, properties);
+    allocInfo.memoryTypeIndex = vulkanDevice->FindMemoryType(memRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(s_vulkanDevice->_device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+    if (vkAllocateMemory(vulkanDevice->_device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate image memory!");
     }
 
-    vkBindImageMemory(s_vulkanDevice->_device, image, imageMemory, 0);
+    vkBindImageMemory(vulkanDevice->_device, image, imageMemory, 0);
 }
 
 void glTF::Texture::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
-    VkCommandBuffer commandBuffer = s_vulkanDevice->BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = vulkanDevice->BeginSingleTimeCommands();
     
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -89,11 +89,11 @@ void glTF::Texture::TransitionImageLayout(VkImage image, VkFormat format, VkImag
         1, &barrier
     );
 
-    s_vulkanDevice->EndSingleTimeCommands(commandBuffer, queue);
+    vulkanDevice->EndSingleTimeCommands(commandBuffer, queue);
 }
 
 void glTF::Texture::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-    VkCommandBuffer commandBuffer = s_vulkanDevice->BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = vulkanDevice->BeginSingleTimeCommands();
 
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
@@ -113,29 +113,29 @@ void glTF::Texture::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t w
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 
-    s_vulkanDevice->EndSingleTimeCommands(commandBuffer, queue);
+    vulkanDevice->EndSingleTimeCommands(commandBuffer, queue);
 }
 
 void glTF::Texture::PrepareImage(void* buffer, VkDeviceSize bufferSize, VkFormat format, uint32_t texWidth, uint32_t texHeight) {
 
-    s_mipLevel = 1;
+    mipLevel = 1;
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
-    s_vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+    vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
     void* data;
-    vkMapMemory(s_vulkanDevice->_device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    vkMapMemory(vulkanDevice->_device, stagingBufferMemory, 0, bufferSize, 0, &data);
     memcpy(data, buffer, bufferSize);
-    vkUnmapMemory(s_vulkanDevice->_device, stagingBufferMemory);
+    vkUnmapMemory(vulkanDevice->_device, stagingBufferMemory);
 
-    CreateImage(texWidth, texHeight, s_mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, s_textureImage, s_textureImageMemory);
-    TransitionImageLayout(s_textureImage, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, s_mipLevel);
-    CopyBufferToImage(stagingBuffer, s_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    TransitionImageLayout(s_textureImage, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, s_mipLevel);
+    CreateImage(texWidth, texHeight, mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
+    TransitionImageLayout(textureImage, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevel);
+    CopyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    TransitionImageLayout(textureImage, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevel);
     
-    vkDestroyBuffer(s_vulkanDevice->_device, stagingBuffer, nullptr);
-    vkFreeMemory(s_vulkanDevice->_device, stagingBufferMemory, nullptr);
+    vkDestroyBuffer(vulkanDevice->_device, stagingBuffer, nullptr);
+    vkFreeMemory(vulkanDevice->_device, stagingBufferMemory, nullptr);
 }
 
 VkImageView glTF::Texture::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) {
@@ -151,7 +151,7 @@ VkImageView glTF::Texture::CreateImageView(VkImage image, VkFormat format, VkIma
     viewInfo.subresourceRange.layerCount = 1;
 
     VkImageView imageView;
-    if (vkCreateImageView(s_vulkanDevice->_device, &viewInfo, nullptr, &s_textureImageView) != VK_SUCCESS) {
+    if (vkCreateImageView(vulkanDevice->_device, &viewInfo, nullptr, &textureImageView) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
     }
 
@@ -160,7 +160,7 @@ VkImageView glTF::Texture::CreateImageView(VkImage image, VkFormat format, VkIma
 
 void glTF::Texture::CreateSampler() {
     VkPhysicalDeviceProperties properties{};
-    vkGetPhysicalDeviceProperties(s_vulkanDevice->_physicalDevice, &properties);
+    vkGetPhysicalDeviceProperties(vulkanDevice->_physicalDevice, &properties);
 
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -177,17 +177,17 @@ void glTF::Texture::CreateSampler() {
     samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = static_cast<float>(s_mipLevel);
+    samplerInfo.maxLod = static_cast<float>(mipLevel);
     samplerInfo.mipLodBias = 0.0f;
 
-    if (vkCreateSampler(s_vulkanDevice->_device, &samplerInfo, nullptr, &s_textureSampler) != VK_SUCCESS) {
+    if (vkCreateSampler(vulkanDevice->_device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture sampler!");
     }
 }
 
 void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* device) {
 
-    s_vulkanDevice = device;
+    vulkanDevice = device;
 
     unsigned char* buffer = nullptr;
     VkDeviceSize bufferSize = 0;
@@ -213,7 +213,7 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* dev
 
 
     PrepareImage(buffer, bufferSize, VK_FORMAT_R8G8B8A8_UNORM, gltfImage.width, gltfImage.height);
-    CreateImageView(s_textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, s_mipLevel);
+    CreateImageView(textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
     CreateSampler();
 
     if (deleteBuffer) {
@@ -225,6 +225,13 @@ void glTF::LoadImages(tinygltf::Model& input) {
     for (tinygltf::Image& image : input.images) {
         Texture texture;
         texture.LoadglTFImages(image, _vulkanDevice);
+        _textures.push_back(texture);
+    }
+}
+
+glTF::Texture* glTF::GetTexture(uint32_t index) {
+    if (index < _textures.size()) {
+        return &_textures[index];
     }
 }
 
@@ -233,23 +240,17 @@ void glTF::LoadglTFMaterials(tinygltf::Model& input) {
     _gltfMaterials.resize(input.materials.size());
 
     for (size_t i = 0; i < input.materials.size(); i++) {
-        tinygltf::Material glTFMaterial = input.materials[i];
-        //ベースカラー
-        if (glTFMaterial.values.find("baseColorFactor") != glTFMaterial.values.end()) {
-            _gltfMaterials[i].baseColorFactor = glm::make_vec4(glTFMaterial.values["baseColorFactor"].ColorFactor().data());
-        }
-        //ベースカラーのテクスチャインデックス
-        if (glTFMaterial.values.find("baseColorTexture") != glTFMaterial.values.end()) {
-            _gltfMaterials[i]._gltfBaseColorTextureIndex = glTFMaterial.values["baseColorTexture"].TextureIndex();
-        }
+        tinygltf::Material material = input.materials[i];
+        //baseColor
+        if (material.values.find("baseColorFactor") != material.values.end()) {
+            _gltfMaterials[i].baseColorFactor = glm::make_vec4(material.values["baseColorFactor"].ColorFactor().data());
 
-    }
-}
+        }
+        //texture
+        if (material.values.find("baseColorTexture") != material.values.end()) {
+            _gltfMaterials[i].baseColorTexture = GetTexture(input.textures[material.values["baseColorTexture"].TextureIndex()].source);
 
-void glTF::LoadglTFTextures(tinygltf::Model& input) {
-    _gltfTextures.resize(input.textures.size());
-    for (size_t i = 0; i < input.textures.size(); i++) {
-        _gltfTextures[i] = input.textures[i].source;
+        }
     }
 }
 
@@ -395,7 +396,6 @@ void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
 
         LoadImages(glTFInput);
         LoadglTFMaterials(glTFInput);
-        LoadglTFTextures(glTFInput);
         const tinygltf::Scene& scene = glTFInput.scenes[0];
         for (size_t i = 0; i < scene.nodes.size(); i++) {
             const tinygltf::Node node = glTFInput.nodes[scene.nodes[i]];
@@ -447,8 +447,4 @@ void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
 
     vkDestroyBuffer(_device, indexStaging.buffer, nullptr);
     vkFreeMemory(_device, indexStaging.memory, nullptr);
-}
-
-uint32_t glTF::getImageNum() {
-    return _gltfImages.size();
 }

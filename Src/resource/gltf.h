@@ -15,14 +15,14 @@ class glTF {
 public:
 
     struct Texture {
-        VkImage s_textureImage;
-        VkDeviceMemory s_textureImageMemory;
-        VkImageView s_textureImageView;
-        VkSampler s_textureSampler;
+        VkImage textureImage;
+        VkDeviceMemory textureImageMemory;
+        VkImageView textureImageView;
+        VkSampler textureSampler;
         VkDescriptorSet descriptorSet;
 
-        VulkanDevice* s_vulkanDevice;
-        uint32_t s_mipLevel;
+        VulkanDevice* vulkanDevice;
+        uint32_t mipLevel;
         VkQueue queue;
 
         /**
@@ -63,7 +63,8 @@ public:
 
     struct glTFMaterial {
         glm::vec4 baseColorFactor = glm::vec4(1.0f);
-        uint32_t _gltfBaseColorTextureIndex;
+        uint32_t baseColorTexture;
+        Texture* baseColorTexture = nullptr;
     };
 
     struct Primitive {
@@ -92,12 +93,10 @@ public:
 
 
     void LoadImages(tinygltf::Model& gltfModel);
+    Texture* GetTexture(uint32_t index);
     void LoadglTFMaterials(tinygltf::Model& input);
-    void LoadglTFTextures(tinygltf::Model& input);
     void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
     void LoadFromFile(std::string filename, VulkanDevice* device);
-
-    uint32_t getImageNum();
 
     
 
@@ -107,9 +106,8 @@ private:
     VkCommandPool g_commandPool = VK_NULL_HANDLE;
 
 
-    std::vector<Texture> _gltfImages;
+    std::vector<Texture> _textures;
     std::vector<glTFMaterial> _gltfMaterials;
-    std::vector<uint32_t> _gltfTextures;
 
     std::vector<Node> _gltfNodes;
 
