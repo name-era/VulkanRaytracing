@@ -1,8 +1,6 @@
 #include "appBase.h"
 
 AppBase::AppBase() :
-    _swapChainImageFormat(VK_FORMAT_B8G8R8A8_SRGB),
-    _swapChainExtent({ 0,0 }),
     _currentFrame(0),
     _framebufferResized(false),
     MAX_FRAMES_IN_FLIGHT(2)
@@ -13,179 +11,6 @@ AppBase::AppBase() :
     camera.setRotation(glm::vec3(0.0f, -135.0f, 0.0f));
     camera.setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 256.0f);
 }
-
-
-
-void AppBase::CreateDepthResources() {
-
-    VkFormat depthFormat = FindDepthFormat();
-
-    CreateImage(_swapChainExtent.width, _swapChainExtent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _depthImage, _depthImageMemory);
-    _depthImageView = CreateImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-}
-
-void AppBase::CreateFramebuffers() {
-
-    for (size_t i = 0; i < _swapChainResources.size(); i++) {
-        std::array<VkImageView, 2> attachments = {
-            _swapChainResources[i]->swapChainImageView,
-            _depthImageView
-        };
-
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = _renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = _swapChainExtent.width;
-        framebufferInfo.height = _swapChainExtent.height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(_device, &framebufferInfo, nullptr, &_swapChainResources[i]->swapChainFrameBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create framebuffer!");
-        }
-    }
-
-}
-
-
-
-
-void AppBase::CreateUniformBuffers() {
-
-    VkDeviceSize bufferSize = sizeof(_ubo.values);
-    CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _ubo.buffer, _ubo.memory);
-}
-
-
-
-
-
-void AppBase::DrawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, Node node)
-{
-    if (node.mesh.primitives.size() > 0) {
-
-        glm::mat4 nodeMatrix = node.matrix;
-        Node* currentParent = node.parent;
-        while (currentParent) {
-            nodeMatrix = currentParent->matrix * nodeMatrix;
-            currentParent = currentParent->parent;
-        }
-
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &nodeMatrix);
-
-        for (Primitive& primitive : node.mesh.primitives) {
-            if (primitive.indexCount > 0) {
-                //テクスチャインデックスの取得
-                Texture texture = _gltfTextures[_gltfMaterials[primitive.materialIndex]._gltfBaseColorTextureIndex];
-
-                //現在のプリミティブのテクスチャにディスクリプタをバインドする
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &_gltfImages[texture.imageIndex].descriptorSet, 0, nullptr);
-                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
-            }
-        }
-    }
-
-    for (auto& child : node.children) {
-        DrawNode(commandBuffer, pipelineLayout, child);
-    }
-}
-
-void AppBase::CreateCommandBuffers() {
-
-    //コマンドバッファの割り当て
-    _commandBuffers.resize(_swapChainResources.size());
-
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = _commandPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)_commandBuffers.size();
-
-    if (vkAllocateCommandBuffers(_device, &allocInfo, _commandBuffers.data()) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate command buffers!");
-    }
-
-    //コマンドバッファへの記録の開始
-    for (size_t i = 0; i < _commandBuffers.size(); i++) {
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-        if (vkBeginCommandBuffer(_commandBuffers[i], &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording command buffer!");
-        }
-
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = _renderPass;
-        renderPassInfo.framebuffer = _swapChainResources[i]->swapChainFrameBuffer;
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = _swapChainExtent;
-
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.f, 0.f, 0.f, 1.0f} };
-        clearValues[1].depthStencil = { 1.0f, 0 };
-
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _graphicsPipeline);
-
-        vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout, 0, 1, &_descriptorSet, 0, nullptr);
-
-
-        //モデル描画
-        VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(_commandBuffers[i], 0, 1, &_gltfVertices.buffer, offsets);
-
-        //頂点数が2^16よりも多いからUINT32
-        vkCmdBindIndexBuffer(_commandBuffers[i], _gltfIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-        for (auto& node : _gltfNodes) {
-            DrawNode(_commandBuffers[i], _pipelineLayout, node);
-        }
-
-        vkCmdEndRenderPass(_commandBuffers[i]);
-
-        if (vkEndCommandBuffer(_commandBuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to record command buffer!");
-        }
-    }
-}
-
-void AppBase::CreateSyncObjects() {
-    //セマフォ：
-    //画像が取得されてレンダリングの準備ができたことを通知する
-    //レンダリングが終了してプレゼンテーションが行われる可能性があることを通知する
-    _imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    _renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    _inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-    _imagesInFlight.resize(_swapChainResources.size(), VK_NULL_HANDLE);
-
-    VkSemaphoreCreateInfo semaphoreInfo{};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
-            vkCreateFence(_device, &fenceInfo, nullptr, &_inFlightFences[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create synchronization objects for a frame!");
-        }
-    }
-}
-
-
-
-
-
-
-
 
 
 
@@ -614,7 +439,7 @@ void AppBase::PickupPhysicalDevice() {
 
 void AppBase::CreateRenderPass() {
     VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = _swapchain->_colorFormat;
+    colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -624,7 +449,7 @@ void AppBase::CreateRenderPass() {
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = FindDepthFormat();
+    depthAttachment.format = _vulkanDevice->FindDepthFormat();
     depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -670,18 +495,18 @@ void AppBase::CreateRenderPass() {
     }
 }
 
-void Shader::CreateGraphicsPipeline(ShaderModuleInfo vertexShaderSet, ShaderModuleInfo fragmentShaderSet, uint32_t shaderIndex) {
+void AppBase::CreateGraphicsPipeline(Shader::ShaderModuleInfo vertModule, Shader::ShaderModuleInfo fragModule) {
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertexShaderSet.handle;
+    vertShaderStageInfo.module = vertModule.handle;
     vertShaderStageInfo.pName = "main";
 
     VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
     fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragmentShaderSet.handle;
+    fragShaderStageInfo.module = fragModule.handle;
     fragShaderStageInfo.pName = "main";
 
     VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
@@ -689,9 +514,8 @@ void Shader::CreateGraphicsPipeline(ShaderModuleInfo vertexShaderSet, ShaderModu
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-
-    auto bindingDescription = Vertex::getBindingDescription();
-    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+    auto bindingDescription = glTF::Vertex::getBindingDescription();
+    auto attributeDescriptions = glTF::Vertex::getAttributeDescriptions();
 
     vertexInputInfo.vertexBindingDescriptionCount = 1;
     vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
@@ -706,14 +530,14 @@ void Shader::CreateGraphicsPipeline(ShaderModuleInfo vertexShaderSet, ShaderModu
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)_swapChainExtent.width;
-    viewport.height = (float)_swapChainExtent.height;
+    viewport.width = (float)_swapchain->_extent.width;
+    viewport.height = (float)_swapchain->_extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = { 0, 0 };
-    scissor.extent = _swapChainExtent;
+    scissor.extent = _swapchain->_extent;
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -766,8 +590,8 @@ void Shader::CreateGraphicsPipeline(ShaderModuleInfo vertexShaderSet, ShaderModu
     pushConstantRange.offset = 0;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-
-    std::array<VkDescriptorSetLayout, 2> bindings = { _pipelines[shaderIndex]->descriptorSetLayout.matrices, _pipelines[shaderIndex]->descriptorSetLayout.textures };
+    
+    std::array<VkDescriptorSetLayout, 2> bindings = { _gltf->_descriptorSetLayout.matrix, _gltf->_descriptorSetLayout.texture };
 
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t> (bindings.size());
@@ -775,7 +599,7 @@ void Shader::CreateGraphicsPipeline(ShaderModuleInfo vertexShaderSet, ShaderModu
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
 
-    if (vkCreatePipelineLayout(_device, &pipelineLayoutInfo, nullptr, &_pipelines[shaderIndex]->pipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(_device, &pipelineLayoutInfo, nullptr, &_pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");
     }
 
@@ -795,25 +619,180 @@ void Shader::CreateGraphicsPipeline(ShaderModuleInfo vertexShaderSet, ShaderModu
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-    if (vkCreateGraphicsPipelines(_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipelines[shaderIndex]->graphicsPipeline) != VK_SUCCESS) {
+    if (vkCreateGraphicsPipelines(_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) != VK_SUCCESS) {
         throw std::runtime_error("failed to create graphics pipeline!");
     }
 
-    vkDestroyShaderModule(_device, vertexShaderSet.handle, nullptr);
-    vkDestroyShaderModule(_device, fragmentShaderSet.handle, nullptr);
+    vkDestroyShaderModule(_device, vertModule.handle, nullptr);
+    vkDestroyShaderModule(_device, fragModule.handle, nullptr);
 }
 
+void AppBase::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = mipLevels;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = format;
+    imageInfo.tiling = tiling;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = usage;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (!(imageInfo.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
 
+    if (vkCreateImage(_device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create image!");
+    }
 
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(_device, image, &memRequirements);
 
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = _vulkanDevice->FindMemoryType(memRequirements.memoryTypeBits, properties);
 
+    if (vkAllocateMemory(_device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate image memory!");
+    }
 
+    vkBindImageMemory(_device, image, imageMemory, 0);
+}
 
+VkImageView AppBase::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) {
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = mipLevels;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
 
+    VkImageView imageView;
+    if (vkCreateImageView(_device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture image view!");
+    }
 
+    return imageView;
+}
 
+void AppBase::CreateDepthResources() {
 
+    VkFormat depthFormat = _vulkanDevice->FindDepthFormat();
+    CreateImage(_swapchain->_extent.width, _swapchain->_extent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _depthImage, _depthImageMemory);
+    _depthImageView = CreateImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+}
 
+void AppBase::CreateFramebuffers() {
+    
+    _frameBuffers.resize(_swapchain->_imageCount);
+
+    for (size_t i = 0; i < _swapchain->_imageCount; i++) {
+        
+        std::array<VkImageView, 2> attachments = {
+            _swapchain->_swapchainResources[i].imageview,
+            _depthImageView
+        };
+
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = _renderPass;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferInfo.pAttachments = attachments.data();
+        framebufferInfo.width = _swapchain->_extent.width;
+        framebufferInfo.height = _swapchain->_extent.height;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(_device, &framebufferInfo, nullptr, &_frameBuffers[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create framebuffer!");
+        }
+    }
+}
+
+void AppBase::CreateCommandBuffers() {
+
+    _commandBuffers.resize(_swapchain->_imageCount);
+
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = _vulkanDevice->_commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = (uint32_t)_commandBuffers.size();
+
+    if (vkAllocateCommandBuffers(_device, &allocInfo, _commandBuffers.data()) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate command buffers!");
+    }
+
+    //コマンドバッファへの記録の開始
+    for (size_t i = 0; i < _commandBuffers.size(); i++) {
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+        if (vkBeginCommandBuffer(_commandBuffers[i], &beginInfo) != VK_SUCCESS) {
+            throw std::runtime_error("failed to begin recording command buffer!");
+        }
+
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = _renderPass;
+        renderPassInfo.framebuffer = _frameBuffers[i];
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = _swapchain->_extent;
+
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = { {0.f, 0.f, 0.f, 1.0f} };
+        clearValues[1].depthStencil = { 1.0f, 0 };
+
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
+
+        _gltf->Draw(_commandBuffers[i], _pipelineLayout);
+        
+        vkCmdEndRenderPass(_commandBuffers[i]);
+
+        if (vkEndCommandBuffer(_commandBuffers[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to record command buffer!");
+        }
+    }
+}
+
+void AppBase::CreateSyncObjects() {
+    //セマフォ：
+    //画像が取得されてレンダリングの準備ができたことを通知する
+    //レンダリングが終了してプレゼンテーションが行われる可能性があることを通知する
+    _imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    _renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    _inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+    _imagesInFlight.resize(_swapchain->_imageCount, VK_NULL_HANDLE);
+
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        if (vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
+            vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(_device, &fenceInfo, nullptr, &_inFlightFences[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create synchronization objects for a frame!");
+        }
+    }
+}
 
 void AppBase::Initialize() {
 
@@ -822,29 +801,30 @@ void AppBase::Initialize() {
     CreateInstance();
     SetupDebugMessenger();
     PickupPhysicalDevice();
+
+    _vulkanDevice = new VulkanDevice();
     _vulkanDevice->CreateLogicalDevice();
 
+    _swapchain = new Swapchain();
     _swapchain->Connect(_window, _instance, _physicalDevice, _device);
     _swapchain->CreateSurface();
     _swapchain->CreateSwapChain();
 
     CreateRenderPass();
     
-    //load gltf model
-    _gltf = new glTF(*_vulkanDevice);
-    _gltf->LoadFromFile("./models/flightHelmet/FlightHelmet.gltf");
-    
-    //load shader(とりあえず1つ)
     _shader = new Shader();
-    _shader->LoadShaderPrograms("shaders/mesh.vert.spv", "shaders/mesh.frag.spv", 1);
+    std::array<Shader::ShaderModuleInfo, 2> shaderModules = _shader->LoadShaderPrograms("shaders/mesh.vert.spv", "shaders/mesh.frag.spv", _vulkanDevice);
+    CreateGraphicsPipeline(shaderModules[0], shaderModules[1]);
+    
+    //load gltf model
+    _gltf = new glTF();
+    _gltf->Connect(_vulkanDevice);
+    _gltf->LoadFromFile("./models/flightHelmet/FlightHelmet.gltf");
+    _gltf->CreateDescriptors();
 
-
-
-    CreateCommandPool();
+    _vulkanDevice->CreateCommandPool();
     CreateDepthResources();
     CreateFramebuffers();
-
-    CreateUniformBuffers();
     CreateCommandBuffers();
     CreateSyncObjects();
 

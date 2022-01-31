@@ -76,7 +76,7 @@ Shader::ShaderModuleInfo Shader::CreateShaderModule(const std::vector<char>& cod
     return module;
 }
 
-void Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName, uint32_t shaderIndex, VulkanDevice* device) {
+std::array<Shader::ShaderModuleInfo, 2> Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName, VulkanDevice* device) {
 
     _vulkanDevice = device;
 
@@ -85,4 +85,8 @@ void Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileNa
 
     ShaderModuleInfo vertShaderModule = CreateShaderModule(vertShaderCode, VK_SHADER_STAGE_VERTEX_BIT);
     ShaderModuleInfo fragShaderModule = CreateShaderModule(fragShaderCode, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    std::array<ShaderModuleInfo, 2> result = { vertShaderModule, fragShaderModule };
+
+    return result;
 }

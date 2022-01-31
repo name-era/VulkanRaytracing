@@ -1,6 +1,6 @@
 #include "gltf.h"
 
-glTF::glTF(VulkanDevice& vulkanDevice) {
+glTF::glTF() {
 
 
 }
@@ -255,6 +255,12 @@ void glTF::LoadglTFMaterials(tinygltf::Model& input) {
     }
 }
 
+void glTF::CreateUniformBuffer(VkBuffer& buffer, VkDeviceMemory& memory) {
+
+    VkDeviceSize bufferSize = sizeof(UniformBlock);
+    _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer, memory);
+}
+
 void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
     Node node{};
     node.matrix = glm::mat4(1.0f);
@@ -285,6 +291,7 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
     //ノードがメッシュデータを持っている場合、頂点とインデックスをロードする
     if (inputNode.mesh > -1) {
         const tinygltf::Mesh mesh = input.meshes[inputNode.mesh];
+
         //このノードのメッシュに対するプリミティブ分回す
         for (size_t i = 0; i < mesh.primitives.size(); i++) {
             const tinygltf::Primitive& glTFPrimitive = mesh.primitives[i];
@@ -367,6 +374,7 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
             primitive.indexCount = indexCount;
             primitive.materialIndex = glTFPrimitive.material;
             node.primitive.push_back(primitive);
+            CreateUniformBuffer(node.ubo.buffer, node.ubo.memory);
         }
     }
     if (parent) {
@@ -440,11 +448,7 @@ void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
     vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
 }
 
-void glTF::CreateDescriptorsets(Shader* shader) {
-    _shader = shader;
-}
-
-void glTF::CreateDescriptorPool(uint32_t shaderIndex) {
+void glTF::CreateDescriptorPool() {
 
     uint32_t imageCount = 0;
     uint32_t uboCount = 0;
@@ -507,7 +511,7 @@ void glTF::CreateDescriptorSetLayout() {
     }
 }
 
-void glTF::CreateDescriptorSets(uint32_t shaderIndex) {
+void glTF::CreateDescriptorSets() {
 
     for (auto node : _nodes) {
 
@@ -542,7 +546,7 @@ void glTF::CreateDescriptorSets(uint32_t shaderIndex) {
     //テクスチャ用
     for (auto& material : _materials) {
         if (material.baseColorTexture != nullptr) {
-            
+
             VkDescriptorSetAllocateInfo allocInfoMaterial{};
             allocInfoMaterial.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
             allocInfoMaterial.descriptorPool = _descriptorPool;
@@ -554,7 +558,7 @@ void glTF::CreateDescriptorSets(uint32_t shaderIndex) {
             }
 
             VkDescriptorImageInfo imageInfo{};
-            
+
             imageInfo.imageView = material.baseColorTexture->textureImageView;
             imageInfo.sampler = material.baseColorTexture->textureSampler;
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -569,5 +573,54 @@ void glTF::CreateDescriptorSets(uint32_t shaderIndex) {
 
             vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWriteMaterial, 0, nullptr);
         }
+    }
+}
+
+void glTF::CreateDescriptors() {
+    CreateDescriptorPool();
+    CreateDescriptorSetLayout();
+    CreateDescriptorSets();
+}
+
+void glTF::Connect(VulkanDevice* device) {
+    _vulkanDevice = device;
+}
+
+void glTF::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, Node node)
+{
+    
+    if (node.primitive.size() > 0) {
+
+        glm::mat4 nodeMatrix = node.matrix;
+        Node* currentParent = node.parent;
+        while (currentParent) {
+            nodeMatrix = currentParent->matrix * nodeMatrix;
+            currentParent = currentParent->parent;
+        }
+
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &nodeMatrix);
+
+        for (Primitive& primitive : node.primitive) {
+            if (primitive.indexCount > 0) {
+                //現在のプリミティブのテクスチャにディスクリプタをバインドする
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &_textures[primitive.materialIndex].descriptorSet, 0, nullptr);
+                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
+            }
+        }
+    }
+
+    for (auto& child : node.children) {
+        DrawNode(commandBuffer, pipelineLayout, child);
+    }
+}
+
+void glTF::Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout) {
+    //モデル描画
+    VkDeviceSize offsets[] = { 0 };
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &_vertices.buffer, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, _indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+    for (auto& node : _nodes) {
+        DrawNode(commandBuffer, pipelineLayout, node);
     }
 }

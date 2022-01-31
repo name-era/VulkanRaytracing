@@ -5,6 +5,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <cassert>
+#include <array>
 
 #include <vulkan/vulkan.h>
 #include <spirv_reflect.h>
@@ -56,10 +57,9 @@ public:
     ShaderModuleInfo CreateShaderModule(const std::vector<char>& code, VkShaderStageFlagBits stage);
 
     //シェーダーファイルを読み込んでシェーダーモジュールを作成する
-    void LoadShaderPrograms(std::string vertFileName, std::string fragFileName, uint32_t shaderIndex, VulkanDevice* device);
+    std::array<ShaderModuleInfo, 2> LoadShaderPrograms(std::string vertFileName, std::string fragFileName, VulkanDevice* device);
+  
 
-    //グラフィックスパイプラインを作成する
-    void CreateGraphicsPipeline(ShaderModuleInfo vertexShaderSet, ShaderModuleInfo fragmentShaderSet, uint32_t shaderIndex);
 
 
 

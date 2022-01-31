@@ -109,84 +109,50 @@ public:
     */
     void PickupPhysicalDevice();
 
-
-
     /**
     * @brief    レンダーパスを作成する
     */
     void CreateRenderPass();
 
+    /**
+    * @brief    グラフィックスパイプラインを作成する
+    */
+    void CreateGraphicsPipeline(Shader::ShaderModuleInfo vertModule, Shader::ShaderModuleInfo fragModule);
 
+    /**
+    * @brief    イメージの作成
+    */
+    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 
+    /**
+    * @brief    イメージビューを作成する
+    */
+    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 
+    /**
+    * @brief    デプスリソースを作成する
+    */
+    void CreateDepthResources();
 
+    /**
+    * @brief    フレームバッファを作成する
+    */
+    void CreateFramebuffers();
 
+    /**
+    * @brief    コマンドバッファを作成する
+    */
+    void CreateCommandBuffers();
 
-
-
-
-
-
-
-
+    /**
+    * @brief    同期オブジェクトを作成する
+    */
+    void CreateSyncObjects();
 
     /**
     * @brief    コールバックの初期化
     */
     void Initialize();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    //深度リソースを作成する
-    void CreateDepthResources();
-
-    //フレームバッファを作成する
-    void CreateFramebuffers();
-
-    //ユニフォームバッファを作成する
-    void CreateUniformBuffers();
-
-
-    //ノードの描画
-    void DrawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, Node node);
-
-    //コマンドバッファを作成する
-    void CreateCommandBuffers();
-
-    //同期オブジェクトを作成する
-    void CreateSyncObjects();
-
 
     /*******************************************************************************************************************
     *                                             ループ内
@@ -211,10 +177,9 @@ public:
     bool HasStencilComponent(VkFormat format);
 
 
-
-
-
-
+    /*******************************************************************************************************************
+    *                                             終了時
+    ********************************************************************************************************************/
     /**
     * @brief    ウィンドウの破棄
     */
@@ -230,6 +195,7 @@ public:
     */
     void Cleanup();
 
+
 #ifdef NDEBUG
     const bool enableValidationLayers = false;
 #else
@@ -241,19 +207,32 @@ public:
         "VK_LAYER_KHRONOS_validation"
     };
 
+    VulkanDevice* _vulkanDevice;
+    Swapchain* _swapchain;
+    Shader* _shader;
+    glTF* _gltf;
 
     GLFWwindow* _window;
     VkInstance _instance;
+    VkDevice _device;
+    VkPhysicalDevice _physicalDevice;
+    VkDebugUtilsMessengerEXT _debugMessenger;
+    VkRenderPass _renderPass;
+    VkPipelineLayout _pipelineLayout;
+    VkPipeline _pipeline;
+    std::vector<VkFramebuffer> _frameBuffers;
+
+    uint32_t _mipLevels;
+
+
+    //depth
+    VkImage _depthImage;
+    VkDeviceMemory _depthImageMemory;
+    VkImageView _depthImageView;
 
 
 
-
-
-
-    VkCommandPool _commandPool;
     std::vector<VkCommandBuffer> _commandBuffers;
-
-
     const int MAX_FRAMES_IN_FLIGHT;
     std::vector<VkSemaphore> _imageAvailableSemaphores;
     std::vector<VkSemaphore> _renderFinishedSemaphores;
@@ -262,12 +241,10 @@ public:
     size_t _currentFrame;
 
 
-    VkImage _depthImage;
-    VkDeviceMemory _depthImageMemory;
-    VkImageView _depthImageView;
 
 
-    uint32_t _mipLevels;
+
+    
 
     float _angle = 0.f;
     float _cmeraPosX = 2.0f;
@@ -283,11 +260,7 @@ public:
     float frameTimer = 1.0f;
 
 
-    Swapchain* _swapchain;
-    glTF* _gltf;
 
 
-    VkDevice _device;
-    VkPhysicalDevice _physicalDevice;
-    VkRenderPass _renderPass;
+
 };

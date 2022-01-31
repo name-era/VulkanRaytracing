@@ -3,6 +3,7 @@
 #include <optional>
 #include <stdexcept>
 #include <vector>
+#include <set>
 
 #include <vulkan/vulkan.h>
 
@@ -50,6 +51,16 @@ struct VulkanDevice {
     * @brief    論理デバイスを取得する
     */
     void CreateLogicalDevice();
+
+    /**
+    * @brief    デバイスの拡張をチェックする
+    */
+    bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
+
+    /**
+    * @brief    デバイスが使えるか確認する
+    */
+    bool IsDeviceSuitable(VkPhysicalDevice device);
 
     /**
     * @brief    コマンドプールを作成する

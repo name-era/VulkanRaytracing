@@ -66,6 +66,10 @@ public:
     */
     void Cleanup();
 
+    VkExtent2D _extent;
+    uint32_t _imageCount;
+    std::vector<SwapchianBuffer> _swapchainResources;
+
 private:
     GLFWwindow* _window;
     VkInstance _instance;
@@ -75,6 +79,4 @@ private:
 
     VkSwapchainKHR _swapchain;
     VkFormat _colorFormat;
-    uint32_t _imageCount;
-    std::vector<SwapchianBuffer> _swapchainResources;
 };

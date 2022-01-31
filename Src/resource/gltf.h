@@ -158,10 +158,11 @@ public:
     };
 
 
-    glTF(VulkanDevice& vulkanDevice);
-    ~glTF();
+    glTF();
+    ~glTF() {};
 
 public:
+
     /**
     * @brief    コピーコンストラクタの禁止
     */
@@ -176,12 +177,10 @@ public:
     void LoadFromFile(std::string filename, VulkanDevice* device);
 
 
-    void CreateDescriptorsets(Shader* shader);
-
     /**
     * @brief    ディスクリプタプールの作成
     */
-    void CreateDescriptorPool(uint32_t shaderIndex);
+    void CreateDescriptorPool();
 
     /**
     * @brief    ディスクリプタレイアウトの作成
@@ -191,8 +190,34 @@ public:
     /**
     * @brief    ディスクリプタセットを作成する
     */
-    void CreateDescriptorSets(uint32_t shaderIndex);
+    void CreateDescriptorSets();
+    
+    /**
+    * @brief    ディスクリプタ関連の作成
+    */
+    void CreateDescriptors();
 
+    /**
+    * @brief    ユニフォームバッファを作成する
+    */
+    void CreateUniformBuffer(VkBuffer& buffer, VkDeviceMemory& deviceMemory);
+
+    /**
+    * @brief    初期化
+    */
+    void Connect(VulkanDevice* device);
+
+    /**
+    * @brief    ノード描画
+    */
+    void DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, Node node);
+
+    /**
+    * @brief    モデル描画
+    */
+    void Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout);
+
+    DescriptorLayouts _descriptorSetLayout;
 
 private:
     std::vector<Texture> _textures;
@@ -203,12 +228,9 @@ private:
     Indices _indices;
 
     VulkanDevice* _vulkanDevice;
-    Shader* _shader;
 
     uint32_t _mipLevel;
     VkQueue _queue;
-    DescriptorLayouts _descriptorSetLayout;
+
     VkDescriptorPool _descriptorPool;
-
-
 };
