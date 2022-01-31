@@ -11,15 +11,54 @@
 #include "dataStructure.h"
 #include "device.h"
 
-class gltf {
+class glTF {
 public:
 
-    struct glTFImage {
-        VkImage textureImage;
-        VkDeviceMemory textureImageMemory;
-        VkImageView textureImageView;
-        VkSampler textureSampler;
+    struct Texture {
+        VkImage s_textureImage;
+        VkDeviceMemory s_textureImageMemory;
+        VkImageView s_textureImageView;
+        VkSampler s_textureSampler;
         VkDescriptorSet descriptorSet;
+
+        VulkanDevice* s_vulkanDevice;
+        uint32_t s_mipLevel;
+        VkQueue queue;
+
+        /**
+        * @brief    イメージの作成
+        */
+        void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+
+        /**
+        * @brief    イメージレイアウトの作成
+        */
+        void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
+
+        /**
+        * @brief    バッファをイメージにコピーする
+        */
+        void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+
+        /**
+        * @brief    イメージの準備
+        */
+        void PrepareImage(void* buffer, VkDeviceSize bufferSize, VkFormat format, uint32_t texWidth, uint32_t texHeight);
+
+        /**
+        * @brief    イメージビューを作成する
+        */
+        VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
+
+        /**
+        * @brief    サンプラーを作成する
+        */
+        void CreateSampler();
+
+        /**
+        * @brief    イメージの読み込み
+        */
+        void LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* device);
     };
 
     struct glTFMaterial {
@@ -41,25 +80,22 @@ public:
     };
 
 
-    gltf(VulkanDevice& vulkanDevice);
-    ~gltf();
+    glTF(VulkanDevice& vulkanDevice);
+    ~glTF();
 
 public:
     /**
     * @brief    コピーコンストラクタの禁止
     */
-    gltf(const gltf&);
-    gltf& operator=(const gltf&);
+    glTF(const glTF&);
+    glTF& operator=(const glTF&);
 
 
-    void CreateglTFImage(glTFImage* image, void* buffer, VkDeviceSize bufferSize, VkFormat format, uint32_t texWidth, uint32_t texHeight);
-    void CreateglTFImageView(glTFImage* image, VkFormat format);
-    void CreateglTFSampler(glTFImage* image);
-    void LoadglTFImages(tinygltf::Model& input);
+    void LoadImages(tinygltf::Model& gltfModel);
     void LoadglTFMaterials(tinygltf::Model& input);
     void LoadglTFTextures(tinygltf::Model& input);
     void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
-    void LoadglTF(std::string filename);
+    void LoadFromFile(std::string filename, VulkanDevice* device);
 
     uint32_t getImageNum();
 
@@ -71,7 +107,7 @@ private:
     VkCommandPool g_commandPool = VK_NULL_HANDLE;
 
 
-    std::vector<glTFImage> _gltfImages;
+    std::vector<Texture> _gltfImages;
     std::vector<glTFMaterial> _gltfMaterials;
     std::vector<uint32_t> _gltfTextures;
 
@@ -79,11 +115,10 @@ private:
 
     Vertices _gltfVertices;
     Indices _gltfIndices;
-    
-    VulkanDevice* _vulkanFunc;
-    VkDevice _device;
-    VkPhysicalDevice _physicalDevice;
+
+    VulkanDevice* _vulkanDevice;
     uint32_t _mipLevel;
+
 
 
 };
