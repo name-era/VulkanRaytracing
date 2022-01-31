@@ -185,9 +185,10 @@ void glTF::Texture::CreateSampler() {
     }
 }
 
-void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* device) {
+void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* device, VkQueue transQueue) {
 
     vulkanDevice = device;
+    queue = transQueue;
 
     unsigned char* buffer = nullptr;
     VkDeviceSize bufferSize = 0;
@@ -224,7 +225,7 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* dev
 void glTF::LoadImages(tinygltf::Model& input) {
     for (tinygltf::Image& image : input.images) {
         Texture texture;
-        texture.LoadglTFImages(image, _vulkanDevice);
+        texture.LoadglTFImages(image, _vulkanDevice, _queue);
         _textures.push_back(texture);
     }
 }
@@ -258,7 +259,6 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
     Node node{};
     node.matrix = glm::mat4(1.0f);
 
-    //ローカルのノード行列
     //4×4行列に修正する
     if (inputNode.scale.size() == 3) {
         node.matrix = glm::scale(node.matrix, glm::vec3(glm::make_vec3(inputNode.scale.data())));
@@ -276,7 +276,6 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
         node.matrix = glm::make_mat4x4(inputNode.matrix.data());
     }
 
-    //子ノードを求める
     if (inputNode.children.size() > 0) {
         for (size_t i = 0; i < inputNode.children.size(); i++) {
             LoadNode(input.nodes[inputNode.children[i]], input, &node, indexBuffer, vertexBuffer);
@@ -300,20 +299,20 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
             const float* texCoordsBuffer = nullptr;
             size_t vertexCount = 0;
 
-            //頂点データのバッファデータ
+            //頂点
             if (glTFPrimitive.attributes.find("POSITION") != glTFPrimitive.attributes.end()) {
                 const tinygltf::Accessor& accessor = input.accessors[glTFPrimitive.attributes.find("POSITION")->second];
                 const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
                 positionBuffer = reinterpret_cast<const float*> (&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
                 vertexCount = accessor.count;
             }
-            //頂点ノーマルのバッファデータ
+            //ノーマル
             if (glTFPrimitive.attributes.find("NORMAL") != glTFPrimitive.attributes.end()) {
                 const tinygltf::Accessor& accessor = input.accessors[glTFPrimitive.attributes.find("NORMAL")->second];
                 const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
                 normalsBuffer = reinterpret_cast<const float*>(&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
             }
-            //頂点テクスチャ座標のバッファデータ
+            //テクスチャ座標
             if (glTFPrimitive.attributes.find("TEXCOORD_0") != glTFPrimitive.attributes.end()) {
                 const tinygltf::Accessor& accessor = input.accessors[glTFPrimitive.attributes.find("TEXCOORD_0")->second];
                 const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
@@ -336,7 +335,6 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
 
             indexCount += static_cast<uint32_t>(accessor.count);
 
-            //色々なインデックスのタイプがある
             switch (accessor.componentType) {
             case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT: {
                 const uint32_t* buf = reinterpret_cast<const uint32_t*> (&buffer.data[accessor.byteOffset + bufferView.byteOffset]);
@@ -377,7 +375,6 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
     else {
         _gltfNodes.push_back(node);
     }
-
 }
 
 void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
@@ -390,7 +387,6 @@ void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
 
     std::vector<uint32_t> indexBuffer;
     std::vector<Vertex> vertexBuffer;
-
 
     if (fileLoaded) {
 
@@ -406,45 +402,40 @@ void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
         throw std::runtime_error("failed to find glTF file!");
     }
 
-    //頂点バッファの作成
+    //vertex buffer
     VkDeviceSize vertexBufferSize = vertexBuffer.size() * sizeof(Vertex);
-
-
     Vertices vertexStaging;
-
-    
-    _vulkanFunc->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vertexStaging.buffer, vertexStaging.memory);
+    _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vertexStaging.buffer, vertexStaging.memory);
     
     void* data;
-    vkMapMemory(_device, vertexStaging.memory, 0, vertexBufferSize, 0, &data);
+    vkMapMemory(_vulkanDevice->_device, vertexStaging.memory, 0, vertexBufferSize, 0, &data);
     memcpy(data, vertexBuffer.data(), (size_t)vertexBufferSize);
-    vkUnmapMemory(_device, vertexStaging.memory);
+    vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
 
-    _vulkanFunc->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _gltfVertices.buffer, _gltfVertices.memory);
+    _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _vertices.buffer, _vertices.memory);
 
-    _vulkanFunc->CopyBuffer(vertexStaging.buffer, _gltfVertices.buffer, vertexBufferSize);
+    _vulkanDevice->CopyBuffer(vertexStaging.buffer, _vertices.buffer, _queue, vertexBufferSize);
 
-    vkDestroyBuffer(_device, vertexStaging.buffer, nullptr);
-    vkFreeMemory(_device, vertexStaging.memory, nullptr);
+    vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
 
 
-
-    //インデックスバッファの作成
+    //index buffer
     VkDeviceSize indexBufferSize = indexBuffer.size() * sizeof(uint32_t);
-    _gltfIndices.count = static_cast<uint32_t>(indexBuffer.size());
+    _indices.count = static_cast<uint32_t>(indexBuffer.size());
 
     Vertices indexStaging;
 
-    _vulkanFunc->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, indexStaging.buffer, indexStaging.memory);
+    _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, indexStaging.buffer, indexStaging.memory);
 
-    vkMapMemory(_device, indexStaging.memory, 0, indexBufferSize, 0, &data);
+    vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, indexBufferSize, 0, &data);
     memcpy(data, indexBuffer.data(), (size_t)indexBufferSize);
-    vkUnmapMemory(_device, indexStaging.memory);
+    vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
 
-    _vulkanFunc->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _gltfIndices.buffer, _gltfIndices.memory);
+    _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _indices.buffer, _indices.memory);
 
-    _vulkanFunc->CopyBuffer(indexStaging.buffer, _gltfIndices.buffer, indexBufferSize);
+    _vulkanDevice->CopyBuffer(indexStaging.buffer, _indices.buffer, _queue, indexBufferSize);
 
-    vkDestroyBuffer(_device, indexStaging.buffer, nullptr);
-    vkFreeMemory(_device, indexStaging.memory, nullptr);
+    vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
 }
