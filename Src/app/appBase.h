@@ -19,15 +19,15 @@
 #include <chrono>
 #include <unordered_map>
 
-
 #include "camera.h"
 #include "initialize.h"
 #include "swapchain.h"
-#include "gltf.h"
 #include "gui.h"
+#include "shader.h"
 
 const uint32_t WIDTH = 1280;
 const uint32_t HEIGHT = 720;
+
 
 class AppBase
 {
@@ -184,7 +184,7 @@ public:
     /**
     * @brief    ÉäÉ\Å[ÉXÇîjä¸Ç∑ÇÈ
     */
-    void Cleanup();
+    void Destroy();
 
 
 #ifdef NDEBUG
@@ -201,7 +201,6 @@ public:
     VulkanDevice* _vulkanDevice;
     Swapchain* _swapchain;
     Shader* _shader;
-    glTF* _gltf;
     Gui* _gui;
     Camera* _camera;
 

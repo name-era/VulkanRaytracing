@@ -110,14 +110,14 @@ void Gui::CreateDepthResources() {
 void Gui::CreateFrameBuffers(VkImageView imageView) {
     
     std::array<VkImageView, 2> attachments = {
-    imageView,
-    _depthImageView
+        imageView,
+        _depthImageView
     };
 
     VkFramebufferCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     info.renderPass = _renderPass;
-    info.attachmentCount = attachments.size();
+    info.attachmentCount = (uint32_t)attachments.size();
     info.pAttachments = attachments.data();
     info.width = _swapchain->_extent.width;
     info.height = _swapchain->_extent.height;

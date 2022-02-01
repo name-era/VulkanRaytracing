@@ -228,7 +228,7 @@ void VulkanDevice::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkQueue qu
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
     //“]‘—‚ðŠ®—¹‚·‚é
-    EndSingleTimeCommands(commandBuffer);
+    EndSingleTimeCommands(commandBuffer, queue);
 }
 
 VkFormat VulkanDevice::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
