@@ -207,7 +207,6 @@ public:
 
     GLFWwindow* _window;
     VkInstance _instance;
-    VkDevice _device;
     VkPhysicalDevice _physicalDevice;
     VkDebugUtilsMessengerEXT _debugMessenger;
     VkRenderPass _renderPass;

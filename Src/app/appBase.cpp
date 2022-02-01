@@ -1243,8 +1243,8 @@ void AppBase::CreateRenderPass() {
     renderPassInfo.pSubpasses = &subpass;
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
-
-    if (vkCreateRenderPass(_device, &renderPassInfo, nullptr, &_renderPass) != VK_SUCCESS) {
+    
+    if (vkCreateRenderPass(_vulkanDevice->_device, &renderPassInfo, nullptr, &_renderPass) != VK_SUCCESS) {
         throw std::runtime_error("failed to create render pass!");
     }
 }
@@ -1353,7 +1353,7 @@ void AppBase::CreateGraphicsPipeline(Shader::ShaderModuleInfo vertModule, Shader
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
 
-    if (vkCreatePipelineLayout(_device, &pipelineLayoutInfo, nullptr, &_pipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(_vulkanDevice->_device, &pipelineLayoutInfo, nullptr, &_pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");
     }
 
@@ -1373,12 +1373,12 @@ void AppBase::CreateGraphicsPipeline(Shader::ShaderModuleInfo vertModule, Shader
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-    if (vkCreateGraphicsPipelines(_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) != VK_SUCCESS) {
+    if (vkCreateGraphicsPipelines(_vulkanDevice->_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) != VK_SUCCESS) {
         throw std::runtime_error("failed to create graphics pipeline!");
     }
 
-    vkDestroyShaderModule(_device, vertModule.handle, nullptr);
-    vkDestroyShaderModule(_device, fragModule.handle, nullptr);
+    vkDestroyShaderModule(_vulkanDevice->_device, vertModule.handle, nullptr);
+    vkDestroyShaderModule(_vulkanDevice->_device, fragModule.handle, nullptr);
 }
 
 void AppBase::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
@@ -1400,23 +1400,23 @@ void AppBase::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, V
         imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
 
-    if (vkCreateImage(_device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+    if (vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
         throw std::runtime_error("failed to create image!");
     }
 
     VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(_device, image, &memRequirements);
+    vkGetImageMemoryRequirements(_vulkanDevice->_device, image, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = _vulkanDevice->FindMemoryType(memRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(_device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+    if (vkAllocateMemory(_vulkanDevice->_device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate image memory!");
     }
 
-    vkBindImageMemory(_device, image, imageMemory, 0);
+    vkBindImageMemory(_vulkanDevice->_device, image, imageMemory, 0);
 }
 
 VkImageView AppBase::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) {
@@ -1432,7 +1432,7 @@ VkImageView AppBase::CreateImageView(VkImage image, VkFormat format, VkImageAspe
     viewInfo.subresourceRange.layerCount = 1;
 
     VkImageView imageView;
-    if (vkCreateImageView(_device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+    if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
     }
 
@@ -1466,7 +1466,7 @@ void AppBase::CreateFramebuffers() {
         framebufferInfo.height = _swapchain->_extent.height;
         framebufferInfo.layers = 1;
 
-        if (vkCreateFramebuffer(_device, &framebufferInfo, nullptr, &_frameBuffers[i]) != VK_SUCCESS) {
+        if (vkCreateFramebuffer(_vulkanDevice->_device, &framebufferInfo, nullptr, &_frameBuffers[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to create framebuffer!");
         }
     }
@@ -1482,7 +1482,7 @@ void AppBase::CreateCommandBuffers() {
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = (uint32_t)_commandBuffers.size();
 
-    if (vkAllocateCommandBuffers(_device, &allocInfo, _commandBuffers.data()) != VK_SUCCESS) {
+    if (vkAllocateCommandBuffers(_vulkanDevice->_device, &allocInfo, _commandBuffers.data()) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate command buffers!");
     }
 
@@ -1540,9 +1540,9 @@ void AppBase::CreateSyncObjects() {
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
-            vkCreateFence(_device, &fenceInfo, nullptr, &_inFlightFences[i]) != VK_SUCCESS) {
+        if (vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
+            vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
+            vkCreateFence(_vulkanDevice->_device, &fenceInfo, nullptr, &_inFlightFences[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to create synchronization objects for a frame!");
         }
     }
@@ -1560,7 +1560,7 @@ void AppBase::Initialize() {
     _vulkanDevice->CreateLogicalDevice();
 
     _swapchain = new Swapchain();
-    _swapchain->Connect(_window, _instance, _physicalDevice, _device);
+    _swapchain->Connect(_window, _instance, _physicalDevice, _vulkanDevice->_device);
     _swapchain->CreateSurface();
     _swapchain->CreateSwapChain();
 
@@ -1608,7 +1608,7 @@ void AppBase::RecreateSwapChain() {
     }
 
     //コマンドが終了するまで待つ
-    vkDeviceWaitIdle(_device);
+    vkDeviceWaitIdle(_vulkanDevice->_device);
 
     CleanupSwapchain();
     _swapchain->CreateSwapChain();
@@ -1628,10 +1628,10 @@ void AppBase::RecreateSwapChain() {
 
 void AppBase::drawFrame() {
 
-    vkWaitForFences(_device, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
+    vkWaitForFences(_vulkanDevice->_device, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
 
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(_device, _swapchain->_swapchain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(_vulkanDevice->_device, _swapchain->_swapchain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         RecreateSwapChain();
@@ -1642,7 +1642,7 @@ void AppBase::drawFrame() {
     }
 
     if (_imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-        vkWaitForFences(_device, 1, &_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+        vkWaitForFences(_vulkanDevice->_device, 1, &_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
     }
 
     _imagesInFlight[imageIndex] = _inFlightFences[_currentFrame];
@@ -1664,7 +1664,7 @@ void AppBase::drawFrame() {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    vkResetFences(_device, 1, &_inFlightFences[_currentFrame]);
+    vkResetFences(_vulkanDevice->_device, 1, &_inFlightFences[_currentFrame]);
 
     if (vkQueueSubmit(_vulkanDevice->_graphicsQueue, 1, &submitInfo, _inFlightFences[_currentFrame]) != VK_SUCCESS) {
         throw std::runtime_error("failed to submit draw command buffer!");
@@ -1690,7 +1690,7 @@ void AppBase::Run() {
         drawFrame();
         glTF::GetglTF()->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
     }
-    vkDeviceWaitIdle(_device);
+    vkDeviceWaitIdle(_vulkanDevice->_device);
 }
 
 /*******************************************************************************************************************
@@ -1704,17 +1704,17 @@ void AppBase::CleanupWindow() {
 
 void AppBase::CleanupSwapchain() {
 
-    vkDestroyImageView(_device, _depthImageView, nullptr);
-    vkDestroyImage(_device, _depthImage, nullptr);
-    vkFreeMemory(_device, _depthImageMemory, nullptr);
+    vkDestroyImageView(_vulkanDevice->_device, _depthImageView, nullptr);
+    vkDestroyImage(_vulkanDevice->_device, _depthImage, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, _depthImageMemory, nullptr);
 
     _swapchain->Cleanup();
 
-    vkFreeCommandBuffers(_device, _vulkanDevice->_commandPool, (uint32_t)_commandBuffers.size(), _commandBuffers.data());
+    vkFreeCommandBuffers(_vulkanDevice->_device, _vulkanDevice->_commandPool, (uint32_t)_commandBuffers.size(), _commandBuffers.data());
 
-    vkDestroyPipeline(_device, _pipeline, nullptr);
-    vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
-    vkDestroyRenderPass(_device, _renderPass, nullptr);
+    vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
+    vkDestroyPipelineLayout(_vulkanDevice->_device, _pipelineLayout, nullptr);
+    vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
     
     glTF::GetglTF()->Cleanup();
     _gui->Cleanup();
@@ -1728,9 +1728,9 @@ void AppBase::Destroy() {
     _gui->Destroy();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroySemaphore(_device, _renderFinishedSemaphores[i], nullptr);
-        vkDestroySemaphore(_device, _imageAvailableSemaphores[i], nullptr);
-        vkDestroyFence(_device, _inFlightFences[i], nullptr);
+        vkDestroySemaphore(_vulkanDevice->_device, _renderFinishedSemaphores[i], nullptr);
+        vkDestroySemaphore(_vulkanDevice->_device, _imageAvailableSemaphores[i], nullptr);
+        vkDestroyFence(_vulkanDevice->_device, _inFlightFences[i], nullptr);
     }
 
     if (enableValidationLayers) {
