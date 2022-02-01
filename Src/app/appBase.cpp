@@ -793,19 +793,21 @@ void AppBase::CleanupSwapChain() {
     vkFreeMemory(_device, _depthImageMemory, nullptr);
 
     _swapchain->Cleanup();
+
+    vkFreeCommandBuffers(_device, _vulkanDevice->_commandPool, (uint32_t)_commandBuffers.size(), _commandBuffers.data());
+
+
+    vkDestroyPipeline(_device, _pipeline, nullptr);
     vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
     vkDestroyRenderPass(_device, _renderPass, nullptr);
-
-
-
+    _gltf->Cleanup();
 }
 
 void AppBase::Cleanup() {
 
     CleanupSwapChain();
 
-    //ImGui
-    CleanupImGui();
+    _gui->Cleanup();
 
     vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout.matrices, nullptr);
     vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout.textures, nullptr);

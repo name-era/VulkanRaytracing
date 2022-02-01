@@ -61,13 +61,21 @@ public:
     */
     void CreateSwapChain();
 
+    /**
+    * @brief    表示用
+    */
     VkResult QueuePresent(VkQueue queue, uint32_t imageIndex, VkSemaphore waitSemaphore);
 
+    /**
+    * @brief    スワップチェーン再作成のときにクリーンする
+    */
+    void CleanupSawpchain();
 
     /**
-    * @brief    リリース
+    * @brief    終了時
     */
     void Cleanup();
+
 
     VkExtent2D _extent;
     uint32_t _imageCount;

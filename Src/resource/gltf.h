@@ -214,6 +214,11 @@ public:
     */
     void UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view);
 
+    /**
+    * @brief    ”jŠü
+    */
+    void Cleanup();
+
     DescriptorLayouts _descriptorSetLayout;
 
 private:

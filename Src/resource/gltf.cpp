@@ -634,3 +634,9 @@ void glTF::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view){
     vkUnmapMemory(_vulkanDevice->_device, _uniformBuffer.memory);
     
 }
+
+void glTF::Cleanup() {
+    vkDestroyBuffer(_vulkanDevice->_device, _uniformBuffer.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, _uniformBuffer.memory, nullptr);
+    vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
+}

@@ -150,16 +150,23 @@ void Swapchain::CreateSwapChain() {
     }
 }
 
-void Swapchain::Cleanup() {
+void Swapchain::CleanupSawpchain() {
     if (_swapchain != VK_NULL_HANDLE) {
         for (uint32_t i = 0; i < _imageCount; i++) {
             vkDestroyImageView(_device, _swapchainBuffers[i].imageview, nullptr);
+            vkDestroyImage(_device, _swapchainBuffers[i].image, nullptr);
+            _swapchainBuffers.resize(0);
         }
     }
 
     if (_swapchain != VK_NULL_HANDLE) {
         vkDestroySwapchainKHR(_device, _swapchain, nullptr);
     }
+}
+
+void Swapchain::Cleanup() {
+
+    CleanupSawpchain();
 
     if (_surface != VK_NULL_HANDLE) {
         vkDestroySurfaceKHR(_instance, _surface, nullptr);
