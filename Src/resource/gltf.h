@@ -134,21 +134,18 @@ public:
     struct UniformBuffer {
         VkBuffer buffer;
         VkDeviceMemory memory;
-        VkDescriptorSet descriptorSet;
-    };
+    }_uniformBuffer;
 
     struct UniformBlock {
         glm::mat4 projection;
         glm::mat4 model;
         glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, -5.0f, 1.0f);
-    };
+    }_ubo;
 
     struct Node {
         Node* parent;
         std::vector<Node> children;
         std::vector<Primitive> primitive;
-        UniformBuffer ubo;
-        UniformBlock uniformBlock;
         glm::mat4 matrix;
     };
 
@@ -198,11 +195,6 @@ public:
     void CreateDescriptors();
 
     /**
-    * @brief    ユニフォームバッファを作成する
-    */
-    void CreateUniformBuffer(VkBuffer& buffer, VkDeviceMemory& deviceMemory);
-
-    /**
     * @brief    初期化
     */
     void Connect(VulkanDevice* device);
@@ -216,6 +208,11 @@ public:
     * @brief    モデル描画
     */
     void Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout);
+
+    /**
+    * @brief    ユニフォームバッファの更新
+    */
+    void UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view);
 
     DescriptorLayouts _descriptorSetLayout;
 
@@ -233,4 +230,5 @@ private:
     VkQueue _queue;
 
     VkDescriptorPool _descriptorPool;
+    VkDescriptorSet _uniformDescriptorSet;
 };

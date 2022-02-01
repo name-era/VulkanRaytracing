@@ -158,13 +158,14 @@ public:
     *                                             ループ内
     ********************************************************************************************************************/
 
-    //ユニフォームバッファを更新する
-    void UpdateUniformBuffer();
-
-    //描画する
+    /**
+    * @brief    描画する
+    */
     void drawFrame();
 
-    //メインループ
+    /**
+    * @brief    ループ
+    */
     void Run();
 
     //スワップチェーンを再構成する
@@ -212,6 +213,7 @@ public:
     Shader* _shader;
     glTF* _gltf;
     Gui* _gui;
+    Camera* _camera;
 
 
     GLFWwindow* _window;
@@ -239,25 +241,11 @@ public:
     std::vector<VkSemaphore> _renderFinishedSemaphores;
     std::vector<VkFence> _inFlightFences;
     std::vector<VkFence> _imagesInFlight;
-    size_t _currentFrame;
+    size_t _currentFrame = 0;
 
 
-
-
-
-    
-
-
-
-
-    //カメラの動き
-    Camera camera;
     glm::vec2 mousePos;
     bool viewUpdated = false;
     float frameTimer = 1.0f;
-
-
-
-
 
 };

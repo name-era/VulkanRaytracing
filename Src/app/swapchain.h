@@ -61,6 +61,9 @@ public:
     */
     void CreateSwapChain();
 
+    VkResult QueuePresent(VkQueue queue, uint32_t imageIndex, VkSemaphore waitSemaphore);
+
+
     /**
     * @brief    ƒŠƒŠ[ƒX
     */

@@ -2,182 +2,10 @@
 
 AppBase::AppBase() :
     _currentFrame(0),
-    _framebufferResized(false),
-    MAX_FRAMES_IN_FLIGHT(2)
+    _framebufferResized(false)
 {
-    camera.type = Camera::CameraType::lookat;
-    camera.flipY = true;
-    camera.setPosition(glm::vec3(0.0f, -0.1f, -1.0f));
-    camera.setRotation(glm::vec3(0.0f, -135.0f, 0.0f));
-    camera.setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 256.0f);
+
 }
-
-
-
-//描画
-void AppBase::UpdateUniformBuffer() {
-    _ubo.values.projection = camera.matrices.perspective;
-    _ubo.values.model = camera.matrices.view;
-
-    void* data;
-    vkMapMemory(_device, _ubo.memory, 0, sizeof(_ubo.values), 0, &data);
-    memcpy(data, &_ubo.values, sizeof(_ubo.values));
-    vkUnmapMemory(_device, _ubo.memory);
-}
-
-void AppBase::drawFrame() {
-
-    //画像が取得されてレンダリングの準備ができたセマフォ
-    vkWaitForFences(_device, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
-
-    uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(_device, _swapChain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
-
-    //スワップチェーンがサーフェスと互換性がなくなったとき
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        RecreateSwapChain();
-        return;
-    }
-    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        throw std::runtime_error("failed to acquire swap chain image!");
-    }
-
-
-    if (_imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-        vkWaitForFences(_device, 1, &_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
-    }
-
-    _imagesInFlight[imageIndex] = _inFlightFences[_currentFrame];
-
-    std::array<VkCommandBuffer, 2> submitCommandBuffers = { _commandBuffers[imageIndex], i_commandBuffers[imageIndex] };
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-    VkSemaphore waitSemaphores[] = { _imageAvailableSemaphores[_currentFrame] };
-    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-
-    //送信するコマンドバッファの指定
-    submitInfo.commandBufferCount = static_cast<uint32_t>(submitCommandBuffers.size());
-    submitInfo.pCommandBuffers = submitCommandBuffers.data();
-
-    //レンダリングが終了して表示する準備ができた（コマンドバッファが終了した）セマフォ
-    VkSemaphore signalSemaphores[] = { _renderFinishedSemaphores[_currentFrame] };
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    vkResetFences(_device, 1, &_inFlightFences[_currentFrame]);
-
-    if (vkQueueSubmit(_graphicsQueue, 1, &submitInfo, _inFlightFences[_currentFrame]) != VK_SUCCESS) {
-        throw std::runtime_error("failed to submit draw command buffer!");
-    }
-
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    VkSwapchainKHR swapChains[] = { _swapChain };
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-
-    presentInfo.pImageIndices = &imageIndex;
-
-    result = vkQueuePresentKHR(_presentQueue, &presentInfo);
-
-    //ウィンドウサイズが変更されていたら
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || _framebufferResized) {
-        _framebufferResized = false;
-        RecreateSwapChain();
-    }
-    else if (result != VK_SUCCESS) {
-        throw std::runtime_error("failed to present swap chain image!");
-    }
-
-    _currentFrame = (_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-void AppBase::Run() {
-    while (!glfwWindowShouldClose(_window)) {
-        glfwPollEvents();
-
-        //auto tStart = std::chrono::high_resolution_clock::now();
-
-        if (viewUpdated)
-        {
-            viewUpdated = false;
-        }
-
-        drawFrame();
-
-        //auto tEnd = std::chrono::high_resolution_clock::now();
-        //auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
-        //frameTimer = (float)tDiff / 1000.0f;
-        //camera.update(frameTimer);
-        //if (camera.moving()) {
-        //    //キーボード
-        //    viewUpdated = true;
-        //}
-
-        UpdateUniformBuffer();
-    }
-    vkDeviceWaitIdle(_device);
-}
-
-
-//ウィンドウサイズ変更時
-void AppBase::RecreateSwapChain() {
-
-    //フレームバッファを作成し直す
-    //ビューポートサイズはグラフィックスパイプラインの作成時に指定されるので、パイプラインを再構築する。
-    int width = 0, height = 0;
-    glfwGetFramebufferSize(_window, &width, &height);
-    while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(_window, &width, &height);
-        glfwWaitEvents();
-    }
-
-
-
-    //コマンドが終了するまで待つ
-    vkDeviceWaitIdle(_device);
-
-    CleanupSwapChain();
-
-    CreateSwapChain();
-    CreateSwapChainImageViews();
-    CreateRenderPass();
-    CreateGraphicsPipeline();
-    CreateDepthResources();
-    CreateFramebuffers();
-    CreateUniformBuffers();
-    CreateDescriptorPool();
-    CreateDescriptorSets();
-    CreateCommandBuffers();
-
-    _imagesInFlight.resize(_swapChainResources.size(), VK_NULL_HANDLE);
-
-    camera.updateAspectRatio((float)width / (float)height);
-
-    //ImGui
-    SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(_physicalDevice);
-    ImGui_ImplVulkan_SetMinImageCount(swapChainSupport.capabilities.minImageCount + 1);
-
-    for (auto framebuffer : i_frameBuffers) {
-        vkDestroyFramebuffer(_device, framebuffer, nullptr);
-    }
-    vkDestroyRenderPass(_device, i_renderPass, nullptr);
-
-    CreateRenderPassForImGui();
-    CreateFrameBuffersForImGui();
-    i_commandBuffers.resize(_swapChainResources.size());
-    CreateCommandBuffersForImGui(i_commandBuffers.data(), static_cast<uint32_t>(i_commandBuffers.size()), i_commandPool);
-}
-
 
 /*******************************************************************************************************************
 *                                             コールバック
@@ -215,15 +43,15 @@ void AppBase::MouseMove(double x, double y) {
     bool handled = false;
 
     if (mouseButtons.left) {
-        camera.rotate(glm::vec3(dy * camera.rotationSpeed, -dx * camera.rotationSpeed, 0.0f));
+        _camera.rotate(glm::vec3(dy * _camera.rotationSpeed, -dx * _camera.rotationSpeed, 0.0f));
         viewUpdated = true;
     }
     if (mouseButtons.right) {
-        camera.translate(glm::vec3(-0.0f, 0.0f, dy * 0.05f));
+        _camera.translate(glm::vec3(-0.0f, 0.0f, dy * 0.05f));
         viewUpdated = true;
     }
     if (mouseButtons.middle) {
-        camera.translate(glm::vec3(-dx * 0.01f, -dy * 0.01f, 0.0f));
+        _camera.translate(glm::vec3(-dx * 0.01f, -dy * 0.01f, 0.0f));
         viewUpdated = true;
     }
     //マウス位置保存
@@ -247,7 +75,7 @@ static void wheel(GLFWwindow* window, double x, double y) {
 
     if (instance != NULL) {
         //ワールド座標系に対するデバイス座標系の拡大率を更新する
-        instance->camera.translate(glm::vec3(0.0f, 0.0f, (float)y * 0.05f));
+        instance->_camera.translate(glm::vec3(0.0f, 0.0f, (float)y * 0.05f));
     }
 }
 
@@ -824,8 +652,130 @@ void AppBase::Initialize() {
 
     _gui = new Gui();
     _gui->PrepareImGui(_window, _instance);
+
+    _camera = new Camera();
+    _camera->type = Camera::CameraType::lookat;
+    _camera->flipY = true;
+    _camera->setPosition(glm::vec3(0.0f, -0.1f, -1.0f));
+    _camera->setRotation(glm::vec3(0.0f, -135.0f, 0.0f));
+    _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 256.0f);
 }
 
+/*******************************************************************************************************************
+*                                             描画
+********************************************************************************************************************/
+
+void AppBase::RecreateSwapChain() {
+
+    //フレームバッファを作成し直す
+    //ビューポートサイズはグラフィックスパイプラインの作成時に指定されるので、パイプラインを再構築する。
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(_window, &width, &height);
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(_window, &width, &height);
+        glfwWaitEvents();
+    }
+
+    //コマンドが終了するまで待つ
+    vkDeviceWaitIdle(_device);
+
+    CleanupSwapChain();
+    CreateSwapChain();
+    CreateSwapChainImageViews();
+    CreateRenderPass();
+    CreateGraphicsPipeline();
+    CreateDepthResources();
+    CreateFramebuffers();
+    CreateUniformBuffers();
+    CreateDescriptorPool();
+    CreateDescriptorSets();
+    CreateCommandBuffers();
+
+    _imagesInFlight.resize(_swapChainResources.size(), VK_NULL_HANDLE);
+
+    _camera.updateAspectRatio((float)width / (float)height);
+
+    //ImGui
+    SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(_physicalDevice);
+    ImGui_ImplVulkan_SetMinImageCount(swapChainSupport.capabilities.minImageCount + 1);
+
+    for (auto framebuffer : i_frameBuffers) {
+        vkDestroyFramebuffer(_device, framebuffer, nullptr);
+    }
+    vkDestroyRenderPass(_device, i_renderPass, nullptr);
+
+    CreateRenderPassForImGui();
+    CreateFrameBuffersForImGui();
+    i_commandBuffers.resize(_swapChainResources.size());
+    CreateCommandBuffersForImGui(i_commandBuffers.data(), static_cast<uint32_t>(i_commandBuffers.size()), i_commandPool);
+}
+
+void AppBase::drawFrame() {
+
+    vkWaitForFences(_device, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
+
+    uint32_t imageIndex;
+    VkResult result = vkAcquireNextImageKHR(_device, _swapchain->_swapchain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        RecreateSwapChain();
+        return;
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        throw std::runtime_error("failed to acquire swap chain image!");
+    }
+
+    if (_imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+        vkWaitForFences(_device, 1, &_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+    }
+
+    _imagesInFlight[imageIndex] = _inFlightFences[_currentFrame];
+
+    std::array<VkCommandBuffer, 2> submitCommandBuffers = { _commandBuffers[imageIndex] };
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    VkSemaphore waitSemaphores[] = { _imageAvailableSemaphores[_currentFrame] };
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.commandBufferCount = static_cast<uint32_t>(submitCommandBuffers.size());
+    submitInfo.pCommandBuffers = submitCommandBuffers.data();
+
+    VkSemaphore signalSemaphores[] = { _renderFinishedSemaphores[_currentFrame] };
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    vkResetFences(_device, 1, &_inFlightFences[_currentFrame]);
+
+    if (vkQueueSubmit(_vulkanDevice->_graphicsQueue, 1, &submitInfo, _inFlightFences[_currentFrame]) != VK_SUCCESS) {
+        throw std::runtime_error("failed to submit draw command buffer!");
+    }
+
+    result = _swapchain->QueuePresent(_vulkanDevice->_presentQueue, imageIndex, *waitSemaphores);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || _framebufferResized) {
+        _framebufferResized = false;
+        RecreateSwapChain();
+    }
+    else if (result != VK_SUCCESS) {
+        throw std::runtime_error("failed to present swap chain image!");
+    }
+
+    _currentFrame = (_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+void AppBase::Run() {
+    while (!glfwWindowShouldClose(_window)) {
+
+        glfwPollEvents();
+        drawFrame();
+        _gltf->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
+    }
+    vkDeviceWaitIdle(_device);
+}
 
 /*******************************************************************************************************************
 *                                             終了時
@@ -842,29 +792,12 @@ void AppBase::CleanupSwapChain() {
     vkDestroyImage(_device, _depthImage, nullptr);
     vkFreeMemory(_device, _depthImageMemory, nullptr);
 
-    for (auto s : _swapChainResources) {
-        vkDestroyFramebuffer(_device, s->swapChainFrameBuffer, nullptr);
-        vkDestroyImageView(_device, s->swapChainImageView, nullptr);
-        _swapChainResources.resize(0);
-    }
-
-    //コマンドバッファをクリアする
-    vkFreeCommandBuffers(_device, _commandPool, static_cast<uint32_t> (_commandBuffers.size()), _commandBuffers.data());
-
-
-    vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
+    _swapchain->Cleanup();
     vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
     vkDestroyRenderPass(_device, _renderPass, nullptr);
 
 
-    vkDestroySwapchainKHR(_device, _swapChain, nullptr);
 
-
-    vkDestroyBuffer(_device, _ubo.buffer, nullptr);
-    vkFreeMemory(_device, _ubo.memory, nullptr);
-
-
-    vkDestroyDescriptorPool(_device, _descriptorPool, nullptr);
 }
 
 void AppBase::Cleanup() {

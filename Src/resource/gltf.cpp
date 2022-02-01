@@ -255,12 +255,6 @@ void glTF::LoadglTFMaterials(tinygltf::Model& input) {
     }
 }
 
-void glTF::CreateUniformBuffer(VkBuffer& buffer, VkDeviceMemory& memory) {
-
-    VkDeviceSize bufferSize = sizeof(UniformBlock);
-    _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer, memory);
-}
-
 void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
     Node node{};
     node.matrix = glm::mat4(1.0f);
@@ -374,7 +368,6 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
             primitive.indexCount = indexCount;
             primitive.materialIndex = glTFPrimitive.material;
             node.primitive.push_back(primitive);
-            CreateUniformBuffer(node.ubo.buffer, node.ubo.memory);
         }
     }
     if (parent) {
@@ -446,6 +439,11 @@ void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
 
     vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
+
+    //uniform buffer
+    VkDeviceSize bufferSize = sizeof(UniformBlock);
+    _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _uniformBuffer.buffer, _uniformBuffer.memory);
+
 }
 
 void glTF::CreateDescriptorPool() {
@@ -521,19 +519,19 @@ void glTF::CreateDescriptorSets() {
         allocInfo.descriptorSetCount = 1;
         allocInfo.pSetLayouts = &_descriptorSetLayout.matrix;
 
-        if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &node.ubo.descriptorSet) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &_uniformDescriptorSet) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor sets!");
         }
 
         VkWriteDescriptorSet descriptorWrite{};
 
         VkDescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = node.ubo.buffer;
+        bufferInfo.buffer = _uniformBuffer.buffer;
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBlock);
 
         descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = node.ubo.descriptorSet;
+        descriptorWrite.dstSet = _uniformDescriptorSet;
         descriptorWrite.dstBinding = 0;
         descriptorWrite.dstArrayElement = 0;
         descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -543,7 +541,7 @@ void glTF::CreateDescriptorSets() {
         vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWrite, 0, nullptr);
     }
 
-    //テクスチャ用
+    //テクスチャ
     for (auto& material : _materials) {
         if (material.baseColorTexture != nullptr) {
 
@@ -623,4 +621,16 @@ void glTF::Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout
     for (auto& node : _nodes) {
         DrawNode(commandBuffer, pipelineLayout, node);
     }
+}
+
+void glTF::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view){
+    
+    _ubo.projection = projection;
+    _ubo.model = view;
+
+    void* data;
+    vkMapMemory(_vulkanDevice->_device, _uniformBuffer.memory, 0, sizeof(UniformBlock), 0, &data);
+    memcpy(data, &_uniformBuffer.memory, sizeof(UniformBlock));
+    vkUnmapMemory(_vulkanDevice->_device, _uniformBuffer.memory);
+    
 }
