@@ -100,7 +100,10 @@ struct VulkanDevice {
     */
     VkFormat FindDepthFormat();
 
-
+    /**
+    * @brief    ”jŠü
+    */
+    void Destroy();
 
     VkPhysicalDevice _physicalDevice;
     VkDevice _device;

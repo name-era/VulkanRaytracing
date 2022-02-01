@@ -29,11 +29,11 @@ private:
 
 		if (type == CameraType::firstperson)
 		{
-			matrices.view = rotM * transM;
+			matrix.view = rotM * transM;
 		}
 		else
 		{
-			matrices.view = transM * rotM;
+			matrix.view = transM * rotM;
 		}
 
 		viewPos = glm::vec4(position, 0.0f) * glm::vec4(-1.0f, 1.0f, -1.0f, 1.0f);
@@ -59,7 +59,7 @@ public:
 	{
 		glm::mat4 perspective;
 		glm::mat4 view;
-	} matrices;
+	} matrix;
 
 	struct
 	{
@@ -87,17 +87,17 @@ public:
 		this->fov = fov;
 		this->znear = znear;
 		this->zfar = zfar;
-		matrices.perspective = glm::perspective(glm::radians(fov), aspect, znear, zfar);
+		matrix.perspective = glm::perspective(glm::radians(fov), aspect, znear, zfar);
 		if (flipY) {
-			matrices.perspective[1][1] *= -1.0f;
+			matrix.perspective[1][1] *= -1.0f;
 		}
 	};
 
-	void updateAspectRatio(float aspect)
+	void UpdateAspectRatio(float aspect)
 	{
-		matrices.perspective = glm::perspective(glm::radians(fov), aspect, znear, zfar);
+		matrix.perspective = glm::perspective(glm::radians(fov), aspect, znear, zfar);
 		if (flipY) {
-			matrices.perspective[1][1] *= -1.0f;
+			matrix.perspective[1][1] *= -1.0f;
 		}
 	}
 

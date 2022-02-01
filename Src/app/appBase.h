@@ -1,8 +1,5 @@
 #pragma once
 
-const uint32_t WIDTH = 1280;
-const uint32_t HEIGHT = 720;
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
@@ -29,14 +26,12 @@ const uint32_t HEIGHT = 720;
 #include "gltf.h"
 #include "gui.h"
 
+const uint32_t WIDTH = 1280;
+const uint32_t HEIGHT = 720;
+
 class AppBase
 {
 public:
-
-
-
-
-
 
     struct {
         bool left = false;
@@ -159,6 +154,11 @@ public:
     ********************************************************************************************************************/
 
     /**
+    * @brief   スワップチェーンを再構成する
+    */
+    void RecreateSwapChain();
+
+    /**
     * @brief    描画する
     */
     void drawFrame();
@@ -167,16 +167,6 @@ public:
     * @brief    ループ
     */
     void Run();
-
-    //スワップチェーンを再構成する
-    void RecreateSwapChain();
-
-    //Mipmapg画像を作成する
-    void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
-
-    //ステンシルコンポーネントが含まれているか
-    bool HasStencilComponent(VkFormat format);
-
 
     /*******************************************************************************************************************
     *                                             終了時
@@ -189,7 +179,7 @@ public:
     /**
     * @brief    スワップチェーンのリソースを開放する
     */
-    void CleanupSwapChain();
+    void CleanupSwapchain();
 
     /**
     * @brief    リソースを破棄する
@@ -247,5 +237,7 @@ public:
     glm::vec2 mousePos;
     bool viewUpdated = false;
     float frameTimer = 1.0f;
+
+    std::array<Shader::ShaderModuleInfo, 2> _shaderModules;
 
 };

@@ -255,3 +255,9 @@ VkFormat VulkanDevice::FindDepthFormat() {
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
     );
 }
+
+void VulkanDevice::Destroy() {
+
+    vkDestroyCommandPool(_device, _commandPool, nullptr);
+    vkDestroyDevice(_device, nullptr);
+}

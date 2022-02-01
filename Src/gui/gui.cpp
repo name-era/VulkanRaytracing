@@ -318,15 +318,37 @@ void Gui::Draw() {
     _index = (_index + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-void Gui::CleanupImGui() {
-    
+void Gui::Cleanup() {
     for (auto framebuffer : _frameBuffers) {
         vkDestroyFramebuffer(_vulkanDevice->_device, framebuffer, nullptr);
     }
 
     vkFreeCommandBuffers(_vulkanDevice->_device, _commandPool, 1, &_commandBuffer);
-    vkDestroyCommandPool(_vulkanDevice->_device, _commandPool, nullptr);
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
+    _swapchain->Cleanup();
+}
+
+void Gui::Recreate() {
+    
+    Cleanup();
+    
+    ImGui_ImplVulkan_SetMinImageCount(_swapchain->_minImageCount + 1);
+    _swapchain->CreateSwapChain();
+    CreateRenderPass();
+    CreateDepthResources();
+    for (uint32_t i = 0; i < _swapchain->_imageCount; i++) {
+        CreateFrameBuffers(_swapchain->_swapchainBuffers[i].imageview);
+    }
+
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
+    ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
+    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_graphicsQueue);
+    ImGui_ImplVulkan_DestroyFontUploadObjects();
+}
+
+void Gui::Destroy() {
+    
+    vkDestroyCommandPool(_vulkanDevice->_device, _commandPool, nullptr);
     vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
 
     ImGui_ImplVulkan_Shutdown();

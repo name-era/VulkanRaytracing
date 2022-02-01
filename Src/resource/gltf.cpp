@@ -185,10 +185,7 @@ void glTF::Texture::CreateSampler() {
     }
 }
 
-void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* device, VkQueue transQueue) {
-
-    vulkanDevice = device;
-    queue = transQueue;
+void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage) {
 
     unsigned char* buffer = nullptr;
     VkDeviceSize bufferSize = 0;
@@ -225,9 +222,15 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* dev
 void glTF::LoadImages(tinygltf::Model& input) {
     for (tinygltf::Image& image : input.images) {
         Texture texture;
-        texture.LoadglTFImages(image, _vulkanDevice, _queue);
+        texture.Connect(_vulkanDevice, _queue);
+        texture.LoadglTFImages(image);
         _textures.push_back(texture);
     }
+}
+
+void glTF::Texture::Connect(VulkanDevice* device, VkQueue transQueue) {
+    vulkanDevice = device;
+    queue = transQueue;
 }
 
 glTF::Texture* glTF::GetTexture(uint32_t index) {
@@ -378,7 +381,7 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
     }
 }
 
-void glTF::LoadFromFile(std::string filename, VulkanDevice* device) {
+void glTF::LoadFromFile(std::string filename) {
 
     tinygltf::Model glTFInput;
     tinygltf::TinyGLTF gltfContext;
@@ -635,8 +638,28 @@ void glTF::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view){
     
 }
 
+void glTF::Recreate() {
+    //uniform buffer
+    VkDeviceSize bufferSize = sizeof(UniformBlock);
+    _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _uniformBuffer.buffer, _uniformBuffer.memory);
+    CreateDescriptorPool();
+    CreateDescriptorSets();
+}
+
 void glTF::Cleanup() {
     vkDestroyBuffer(_vulkanDevice->_device, _uniformBuffer.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, _uniformBuffer.memory, nullptr);
     vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
+}
+
+void glTF::Destroy() {
+
+    vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout.matrix, nullptr);
+    vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout.texture, nullptr);
+
+    vkDestroyBuffer(_vulkanDevice->_device, _vertices.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, _vertices.memory, nullptr);
+
+    vkDestroyBuffer(_vulkanDevice->_device, _indices.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, _indices.memory, nullptr);
 }

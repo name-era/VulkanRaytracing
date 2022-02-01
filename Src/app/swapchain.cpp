@@ -150,7 +150,7 @@ void Swapchain::CreateSwapChain() {
     }
 }
 
-void Swapchain::CleanupSawpchain() {
+void Swapchain::Cleanup() {
     if (_swapchain != VK_NULL_HANDLE) {
         for (uint32_t i = 0; i < _imageCount; i++) {
             vkDestroyImageView(_device, _swapchainBuffers[i].imageview, nullptr);
@@ -164,9 +164,9 @@ void Swapchain::CleanupSawpchain() {
     }
 }
 
-void Swapchain::Cleanup() {
+void Swapchain::Destroy() {
 
-    CleanupSawpchain();
+    Cleanup();
 
     if (_surface != VK_NULL_HANDLE) {
         vkDestroySurfaceKHR(_instance, _surface, nullptr);

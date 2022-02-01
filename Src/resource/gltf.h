@@ -116,7 +116,12 @@ public:
         /**
         * @brief    イメージの読み込み
         */
-        void LoadglTFImages(tinygltf::Image& gltfImage, VulkanDevice* device, VkQueue transQueue);
+        void LoadglTFImages(tinygltf::Image& gltfImage);
+
+        /**
+        * @brief    初期化
+        */
+        void Connect(VulkanDevice* device, VkQueue transQueue);
     };
 
     struct glTFMaterial {
@@ -171,7 +176,7 @@ public:
     Texture* GetTexture(uint32_t index);
     void LoadglTFMaterials(tinygltf::Model& input);
     void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
-    void LoadFromFile(std::string filename, VulkanDevice* device);
+    void LoadFromFile(std::string filename);
 
 
     /**
@@ -215,9 +220,19 @@ public:
     void UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view);
 
     /**
-    * @brief    破棄
+    * @brief    再構成
+    */
+    void Recreate();
+
+    /**
+    * @brief    クリーン
     */
     void Cleanup();
+    
+    /**
+    * @brief    破棄
+    */
+    void Destroy();
 
     DescriptorLayouts _descriptorSetLayout;
 

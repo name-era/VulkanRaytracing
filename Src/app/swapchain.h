@@ -69,12 +69,12 @@ public:
     /**
     * @brief    スワップチェーン再作成のときにクリーンする
     */
-    void CleanupSawpchain();
+    void Cleanup();
 
     /**
     * @brief    終了時
     */
-    void Cleanup();
+    void Destroy();
 
 
     VkExtent2D _extent;

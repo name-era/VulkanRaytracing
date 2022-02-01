@@ -46,8 +46,9 @@ public:
     void Present(uint32_t index);
     void Render(uint32_t imageIndex);
     void Draw();
-    void CleanupImGui();
-
+    void Cleanup();
+    void Recreate();
+    void Destroy();
     void Connect(VulkanDevice* device);
 
 private:
