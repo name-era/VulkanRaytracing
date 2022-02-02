@@ -479,8 +479,8 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage) {
     }
 
 
-    PrepareImage(buffer, bufferSize, COLORFORMAT, gltfImage.width, gltfImage.height);
-    CreateImageView(textureImage, COLORFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
+    PrepareImage(buffer, bufferSize, IMAGEFORMAT, gltfImage.width, gltfImage.height);
+    CreateImageView(textureImage, IMAGEFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
     CreateSampler();
 
     if (deleteBuffer) {
@@ -1212,7 +1212,7 @@ void AppBase::PickupPhysicalDevice() {
 
 void AppBase::CreateRenderPass() {
     VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = COLORFORMAT;
+    colorAttachment.format = SRGBCOLORFORMAT;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;

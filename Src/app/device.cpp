@@ -264,7 +264,7 @@ VkFormat VulkanDevice::FindSupportedFormat(const std::vector<VkFormat>& candidat
 }
 
 VkFormat VulkanDevice::FindDepthFormat() {
-    //深度フォーマット候補
+    //デプスフォーマット
     return FindSupportedFormat(
         { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
         VK_IMAGE_TILING_OPTIMAL,

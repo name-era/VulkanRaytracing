@@ -3,7 +3,7 @@
 void Gui::CreateRenderPass() {
 
     VkAttachmentDescription colorAttachment = {};
-    colorAttachment.format = COLORFORMAT;
+    colorAttachment.format = IMAGEFORMAT;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
