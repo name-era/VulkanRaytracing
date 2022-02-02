@@ -154,9 +154,8 @@ void Swapchain::Cleanup() {
     if (_swapchain != VK_NULL_HANDLE) {
         for (uint32_t i = 0; i < _imageCount; i++) {
             vkDestroyImageView(_device, _swapchainBuffers[i].imageview, nullptr);
-            vkDestroyImage(_device, _swapchainBuffers[i].image, nullptr);
-            _swapchainBuffers.resize(0);
         }
+        _swapchainBuffers.resize(0);
     }
 
     if (_swapchain != VK_NULL_HANDLE) {
@@ -166,15 +165,13 @@ void Swapchain::Cleanup() {
 
 void Swapchain::Destroy() {
 
-    Cleanup();
-
     if (_surface != VK_NULL_HANDLE) {
         vkDestroySurfaceKHR(_instance, _surface, nullptr);
     }
 
 }
 
-VkResult Swapchain::QueuePresent(VkQueue queue, uint32_t imageIndex, VkSemaphore& waitSemaphore) {
+VkResult Swapchain::QueuePresent(VkQueue& queue, uint32_t imageIndex, VkSemaphore& waitSemaphore) {
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 

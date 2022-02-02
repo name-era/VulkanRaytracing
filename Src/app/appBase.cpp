@@ -915,6 +915,13 @@ void glTF::Cleanup() {
 }
 
 void glTF::Destroy() {
+    
+    for (auto texture : _textures) {
+        vkDestroySampler(_vulkanDevice->_device, texture.textureSampler, nullptr);
+        vkDestroyImageView(_vulkanDevice->_device, texture.textureImageView, nullptr);
+        vkDestroyImage(_vulkanDevice->_device, texture.textureImage, nullptr);
+        vkFreeMemory(_vulkanDevice->_device, texture.textureImageMemory, nullptr);
+    }
 
     vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout.matrix, nullptr);
     vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout.texture, nullptr);
@@ -1581,8 +1588,8 @@ void AppBase::Initialize() {
     CreateSyncObjects();
 
     _gui = new Gui();
-    _gui->Connect(_vulkanDevice);
-    _gui->PrepareImGui(_window, _instance);
+    //_gui->Connect(_vulkanDevice);
+    //_gui->PrepareImGui(_window, _instance);
 
     _camera = new Camera();
     _camera->type = Camera::CameraType::lookat;
@@ -1621,7 +1628,7 @@ void AppBase::RecreateSwapChain() {
     CreateCommandBuffers();
 
     _camera->UpdateAspectRatio((float)width / (float)height);
-    _gui->Recreate();
+    //_gui->Recreate();
     vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
@@ -1712,7 +1719,7 @@ void AppBase::CleanupSwapchain() {
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
     
     glTF::GetglTF()->Cleanup();
-    _gui->Cleanup();
+    //_gui->Cleanup();
 }
 
 void AppBase::Destroy() {
@@ -1720,7 +1727,7 @@ void AppBase::Destroy() {
     CleanupSwapchain();
     
     glTF::GetglTF()->Destroy();
-    _gui->Destroy();
+    //_gui->Destroy();
 
     vkDestroySemaphore(_vulkanDevice->_device, _renderCompleteSemaphore, nullptr);
     vkDestroySemaphore(_vulkanDevice->_device, _presentCompleteSemaphore, nullptr);
@@ -1730,8 +1737,12 @@ void AppBase::Destroy() {
         DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);
     }    
     
+    for (auto frameBuffer : _frameBuffers) {
+        vkDestroyFramebuffer(_vulkanDevice->_device, frameBuffer, nullptr);
+    }
     _vulkanDevice->Destroy();
 
+    _swapchain->Destroy();
     vkDestroyInstance(_instance, nullptr);
 
     delete _vulkanDevice;
