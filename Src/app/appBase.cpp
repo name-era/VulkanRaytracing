@@ -203,7 +203,7 @@ public:
     /**
     * @brief    ÉmÅ[Éhï`âÊ
     */
-    void DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, Node node);
+    void DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node node);
 
     /**
     * @brief    ÉÇÉfÉãï`âÊ
@@ -236,6 +236,7 @@ public:
     static glTF* GetglTF();
 
     DescriptorLayouts _descriptorSetLayout;
+    VkDescriptorSet _uniformDescriptorSet;
 
 private:
     std::vector<Texture> _textures;
@@ -250,7 +251,7 @@ private:
     uint32_t _mipLevel;
 
     VkDescriptorPool _descriptorPool;
-    VkDescriptorSet _uniformDescriptorSet;
+
 };
 
 namespace {
@@ -848,7 +849,7 @@ void glTF::Connect(VulkanDevice* device) {
     _vulkanDevice = device;
 }
 
-void glTF::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout pipelineLayout, Node node)
+void glTF::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node node)
 {
 
     if (node.primitive.size() > 0) {
@@ -1515,6 +1516,8 @@ void AppBase::CreateCommandBuffers() {
         vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
+        
+        vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout, 0, 1, &s_gltf->_uniformDescriptorSet, 0, nullptr);
 
         glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
         
@@ -1587,6 +1590,7 @@ void AppBase::Initialize() {
     CreateSyncObjects();
 
     _gui = new Gui();
+    _gui->Connect(_vulkanDevice);
     _gui->PrepareImGui(_window, _instance);
 
     _camera = new Camera();

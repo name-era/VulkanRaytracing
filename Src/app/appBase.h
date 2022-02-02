@@ -20,7 +20,6 @@
 #include <unordered_map>
 
 #include "camera.h"
-#include "initialize.h"
 #include "swapchain.h"
 #include "gui.h"
 #include "shader.h"

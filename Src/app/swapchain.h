@@ -7,6 +7,8 @@
 #include <vulkan/vulkan.h>
 #include <glfw3.h>
 
+#include "common.h"
+
 class Swapchain {
 	
 public:

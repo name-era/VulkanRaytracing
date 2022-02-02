@@ -1,6 +1,5 @@
 #pragma once
 
-#define COLORFORMAT VK_FORMAT_R8G8B8A8_UNORM
 #define MAX_FRAMES_IN_FLIGHT 2
 
 #include <optional>
@@ -10,6 +9,8 @@
 
 #include <vulkan/vulkan.h>
 #include <extensions_vk.hpp>
+
+#include "common.h"
 
 struct VulkanDevice {
 
