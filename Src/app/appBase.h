@@ -224,11 +224,10 @@ public:
 
 
     std::vector<VkCommandBuffer> _commandBuffers;
-    std::vector<VkSemaphore> _imageAvailableSemaphores;
-    std::vector<VkSemaphore> _renderFinishedSemaphores;
-    std::vector<VkFence> _inFlightFences;
-    std::vector<VkFence> _imagesInFlight;
-    size_t _currentFrame = 0;
+    VkSemaphore _presentCompleteSemaphore;
+    VkSemaphore _renderCompleteSemaphore;
+    //Fence to wait for all command buffers to finish
+    VkFence _renderFences;
 
 
     glm::vec2 mousePos;

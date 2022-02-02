@@ -68,9 +68,8 @@ private:
     VkDeviceMemory _depthImageMemory;
     VkImageView _depthImageView;
 
-    std::vector<VkSemaphore> _imageSemaphores;
-    std::vector<VkSemaphore> _renderFinishedSemaphores;
-    std::vector<VkFence> _fences;
-    std::vector<VkFence> _imagesInFlight;
+    VkSemaphore _presentCompleteSemaphore;
+    VkSemaphore _renderCompleteSemaphore;
+    VkFence _renderFences;
     uint32_t _index;
 };

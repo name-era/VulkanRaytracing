@@ -137,7 +137,7 @@ void VulkanDevice::CreateLogicalDevice() {
         throw std::runtime_error("failed to create logical device!");
     }
 
-    vkGetDeviceQueue(_device, _queueFamilyIndices.graphics, 0, &_graphicsQueue);
+    vkGetDeviceQueue(_device, _queueFamilyIndices.graphics, 0, &_queue);
 }
 
 bool VulkanDevice::CheckDeviceExtensionSupport(VkPhysicalDevice device) {
@@ -244,7 +244,7 @@ void VulkanDevice::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSi
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
     //“]‘—‚ðŠ®—¹‚·‚é
-    EndSingleTimeCommands(commandBuffer, _graphicsQueue);
+    EndSingleTimeCommands(commandBuffer, _queue);
 }
 
 VkFormat VulkanDevice::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {

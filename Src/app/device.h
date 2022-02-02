@@ -106,7 +106,7 @@ struct VulkanDevice {
     VkPhysicalDeviceMemoryProperties _memProperties;
     std::vector<VkQueueFamilyProperties> _queueFamilyProperties;
     VkCommandPool _commandPool;
-    VkQueue _graphicsQueue;
+    VkQueue _queue;
 
     float _angle = 0.f;
     float _cmeraPosX = 2.0f;

@@ -153,10 +153,6 @@ void Gui::CreateCommandPool() {
 }
 
 void Gui::CreateSemaphore() {
-    _imageSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    _renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    _fences.resize(MAX_FRAMES_IN_FLIGHT);
-    _imagesInFlight.resize(_swapchain->_imageCount, VK_NULL_HANDLE);
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -165,12 +161,10 @@ void Gui::CreateSemaphore() {
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_imageSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
-            vkCreateFence(_vulkanDevice->_device, &fenceInfo, nullptr, &_fences[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create synchronization objects for a frame!");
-        }
+    if (vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_presentCompleteSemaphore) != VK_SUCCESS ||
+        vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_renderCompleteSemaphore) != VK_SUCCESS ||
+        vkCreateFence(_vulkanDevice->_device, &fenceInfo, nullptr, &_renderFences) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create synchronization objects for a frame!");
     }
 }
 
@@ -232,7 +226,7 @@ void Gui::PrepareImGui(GLFWwindow* window, VkInstance& instance) {
     info.PhysicalDevice = _vulkanDevice->_physicalDevice;
     info.Device = _vulkanDevice->_device;
     info.QueueFamily = _vulkanDevice->_queueFamilyIndices.graphics;
-    info.Queue = _vulkanDevice->_graphicsQueue;
+    info.Queue = _vulkanDevice->_queue;
     info.PipelineCache = VK_NULL_HANDLE;
     info.DescriptorPool = _descriptorPool;
     info.Allocator = nullptr;
@@ -244,38 +238,58 @@ void Gui::PrepareImGui(GLFWwindow* window, VkInstance& instance) {
     //upload fonts
     VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
     ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
-    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_graphicsQueue);
+    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_queue);
     ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 
 void Gui::Present(uint32_t index) {
     
+    VkResult result;
+
+    //終わっていないコマンドを待つ
+    do {
+        result = vkWaitForFences(_vulkanDevice->_device, 1, &_renderFences, VK_TRUE, 100000000);
+    } while (result == VK_TIMEOUT);
+
+    vkResetFences(_vulkanDevice->_device, 1, &_renderFences);
+
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(_vulkanDevice->_device, _swapchain->_swapchain, UINT64_MAX, _imageSemaphores[index], VK_NULL_HANDLE, &imageIndex);
+    result = vkAcquireNextImageKHR(_vulkanDevice->_device, _swapchain->_swapchain, UINT64_MAX, _presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        Recreate();
+        return;
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        throw std::runtime_error("failed to acquire swap chain image!");
+    }
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = { _imageSemaphores[index] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitSemaphores = &_presentCompleteSemaphore;
     submitInfo.pWaitDstStageMask = waitStages;
-
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &_commandBuffer;
-
-    VkSemaphore signalSemaphores[] = { _renderFinishedSemaphores[index] };
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
+    submitInfo.pSignalSemaphores = &_renderCompleteSemaphore;
 
-    vkResetFences(_vulkanDevice->_device, 1, &_fences[index]);
-
-    if (vkQueueSubmit(_vulkanDevice->_graphicsQueue, 1, &submitInfo, _fences[index]) != VK_SUCCESS) {
+    if (vkQueueSubmit(_vulkanDevice->_queue, 1, &submitInfo, _renderFences) != VK_SUCCESS) {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
 
-    result = _swapchain->QueuePresent(_vulkanDevice->_graphicsQueue, imageIndex, *waitSemaphores);
+    result = _swapchain->QueuePresent(_vulkanDevice->_queue, imageIndex, _renderCompleteSemaphore);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        Recreate();
+    }
+    else if (result != VK_SUCCESS) {
+        throw std::runtime_error("failed to present swap chain image!");
+    }
+
+    vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
 void Gui::Render(uint32_t imageIndex) {
@@ -355,7 +369,7 @@ void Gui::Recreate() {
 
     VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
     ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
-    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_graphicsQueue);
+    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_queue);
     ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 

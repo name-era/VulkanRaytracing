@@ -489,7 +489,7 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage) {
 void glTF::LoadImages(tinygltf::Model& input) {
     for (tinygltf::Image& image : input.images) {
         Texture texture;
-        texture.Connect(_vulkanDevice, _vulkanDevice->_graphicsQueue);
+        texture.Connect(_vulkanDevice, _vulkanDevice->_queue);
         texture.LoadglTFImages(image);
         _textures.push_back(texture);
     }
@@ -937,7 +937,6 @@ glTF* glTF::GetglTF() {
 *                                             AppBase
 ********************************************************************************************************************/
 AppBase::AppBase() :
-    _currentFrame(0),
     _framebufferResized(false)
 {
 
@@ -1204,7 +1203,7 @@ void AppBase::CreateRenderPass() {
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentDescription depthAttachment{};
     depthAttachment.format = _vulkanDevice->FindDepthFormat();
@@ -1530,13 +1529,6 @@ void AppBase::CreateCommandBuffers() {
 }
 
 void AppBase::CreateSyncObjects() {
-    //セマフォ：
-    //画像が取得されてレンダリングの準備ができたことを通知する
-    //レンダリングが終了してプレゼンテーションが行われる可能性があることを通知する
-    _imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    _renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    _inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-    _imagesInFlight.resize(_swapchain->_imageCount, VK_NULL_HANDLE);
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -1545,13 +1537,12 @@ void AppBase::CreateSyncObjects() {
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
-            vkCreateFence(_vulkanDevice->_device, &fenceInfo, nullptr, &_inFlightFences[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create synchronization objects for a frame!");
-        }
+    if (vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_presentCompleteSemaphore) != VK_SUCCESS ||
+        vkCreateSemaphore(_vulkanDevice->_device, &semaphoreInfo, nullptr, &_renderCompleteSemaphore) != VK_SUCCESS ||
+        vkCreateFence(_vulkanDevice->_device, &fenceInfo, nullptr, &_renderFences) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create synchronization objects for a frame!");
     }
+    
 }
 
 void AppBase::Initialize() {
@@ -1629,18 +1620,24 @@ void AppBase::RecreateSwapChain() {
     glTF::GetglTF()->Recreate();
     CreateCommandBuffers();
 
-    _imagesInFlight.resize(_swapchain->_imageCount, VK_NULL_HANDLE);
-
     _camera->UpdateAspectRatio((float)width / (float)height);
     _gui->Recreate();
+    vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
 void AppBase::drawFrame() {
 
-    vkWaitForFences(_vulkanDevice->_device, 1, &_inFlightFences[_currentFrame], VK_TRUE, UINT64_MAX);
+    VkResult result;
+
+    //終わっていないコマンドを待つ
+    do {
+        result = vkWaitForFences(_vulkanDevice->_device, 1, &_renderFences, VK_TRUE, 100000000);
+    } while (result == VK_TIMEOUT);
+
+    vkResetFences(_vulkanDevice->_device, 1, &_renderFences);
 
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(_vulkanDevice->_device, _swapchain->_swapchain, UINT64_MAX, _imageAvailableSemaphores[_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    result = vkAcquireNextImageKHR(_vulkanDevice->_device, _swapchain->_swapchain, UINT64_MAX, _presentCompleteSemaphore, VK_NULL_HANDLE, &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         RecreateSwapChain();
@@ -1650,36 +1647,25 @@ void AppBase::drawFrame() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-    if (_imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
-        vkWaitForFences(_vulkanDevice->_device, 1, &_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
-    }
-
-    _imagesInFlight[imageIndex] = _inFlightFences[_currentFrame];
-
-    std::array<VkCommandBuffer, 2> submitCommandBuffers = { _commandBuffers[imageIndex] };
+    VkCommandBuffer submitCommandBuffers = _commandBuffers[imageIndex];
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = { _imageAvailableSemaphores[_currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitSemaphores = &_presentCompleteSemaphore;
     submitInfo.pWaitDstStageMask = waitStages;
-    submitInfo.commandBufferCount = static_cast<uint32_t>(submitCommandBuffers.size());
-    submitInfo.pCommandBuffers = submitCommandBuffers.data();
-
-    VkSemaphore signalSemaphores[] = { _renderFinishedSemaphores[_currentFrame] };
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &submitCommandBuffers;
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
+    submitInfo.pSignalSemaphores = &_renderCompleteSemaphore;
 
-    vkResetFences(_vulkanDevice->_device, 1, &_inFlightFences[_currentFrame]);
-
-    if (vkQueueSubmit(_vulkanDevice->_graphicsQueue, 1, &submitInfo, _inFlightFences[_currentFrame]) != VK_SUCCESS) {
+    if (vkQueueSubmit(_vulkanDevice->_queue, 1, &submitInfo, _renderFences) != VK_SUCCESS) {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
 
-    result = _swapchain->QueuePresent(_vulkanDevice->_graphicsQueue, imageIndex, *waitSemaphores);
+    result = _swapchain->QueuePresent(_vulkanDevice->_queue, imageIndex, _renderCompleteSemaphore);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || _framebufferResized) {
         _framebufferResized = false;
@@ -1689,7 +1675,7 @@ void AppBase::drawFrame() {
         throw std::runtime_error("failed to present swap chain image!");
     }
 
-    _currentFrame = (_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
 void AppBase::Run() {
@@ -1736,11 +1722,9 @@ void AppBase::Destroy() {
     glTF::GetglTF()->Destroy();
     _gui->Destroy();
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkDestroySemaphore(_vulkanDevice->_device, _renderFinishedSemaphores[i], nullptr);
-        vkDestroySemaphore(_vulkanDevice->_device, _imageAvailableSemaphores[i], nullptr);
-        vkDestroyFence(_vulkanDevice->_device, _inFlightFences[i], nullptr);
-    }
+    vkDestroySemaphore(_vulkanDevice->_device, _renderCompleteSemaphore, nullptr);
+    vkDestroySemaphore(_vulkanDevice->_device, _presentCompleteSemaphore, nullptr);
+    vkDestroyFence(_vulkanDevice->_device, _renderFences, nullptr);
 
     if (enableValidationLayers) {
         DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);

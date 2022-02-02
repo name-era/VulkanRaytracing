@@ -174,7 +174,7 @@ void Swapchain::Destroy() {
 
 }
 
-VkResult Swapchain::QueuePresent(VkQueue queue, uint32_t imageIndex, VkSemaphore waitSemaphore) {
+VkResult Swapchain::QueuePresent(VkQueue queue, uint32_t imageIndex, VkSemaphore& waitSemaphore) {
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
