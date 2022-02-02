@@ -57,10 +57,10 @@ public:
     ShaderModuleInfo CreateShaderModule(const std::vector<char>& code, VkShaderStageFlagBits stage);
 
     //シェーダーファイルを読み込んでシェーダーモジュールを作成する
-    std::array<ShaderModuleInfo, 2> LoadShaderPrograms(std::string vertFileName, std::string fragFileName, VulkanDevice* device);
+    std::array<ShaderModuleInfo, 2> LoadShaderPrograms(std::string vertFileName, std::string fragFileName);
   
 
-
+    void Connect(VulkanDevice* device);
 
 
     uint32_t uboCount = 0;

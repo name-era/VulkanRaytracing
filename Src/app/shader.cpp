@@ -31,9 +31,9 @@ std::vector<std::vector<Shader::UniformBinding>> Shader::GetUniformDescriptions(
 
     std::vector<std::vector<UniformBinding>> descriptions(sets.size());
 
-    for (auto& s : sets) {
-        for (uint32_t i = 0; i < s->binding_count; i++) {
-            auto b = s->bindings[i];
+    for (uint32_t i = 0; i < sets.size(); i++) {
+        for (uint32_t j = 0; j < sets[i]->binding_count; j++) {
+            auto b = sets[i]->bindings[j];
             UniformBinding u;
             if (b->name != nullptr) {
                 u.name = b->name;
@@ -44,7 +44,7 @@ std::vector<std::vector<Shader::UniformBinding>> Shader::GetUniformDescriptions(
             u.count = b->count;
             u.type = (VkDescriptorType)b->descriptor_type;
 
-            descriptions[b->set].push_back(u);
+            descriptions[i].push_back(u);
         }
     }
     return descriptions;
@@ -76,9 +76,7 @@ Shader::ShaderModuleInfo Shader::CreateShaderModule(const std::vector<char>& cod
     return module;
 }
 
-std::array<Shader::ShaderModuleInfo, 2> Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName, VulkanDevice* device) {
-
-    _vulkanDevice = device;
+std::array<Shader::ShaderModuleInfo, 2> Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName) {
 
     auto vertShaderCode = ReadFile(vertFileName);
     auto fragShaderCode = ReadFile(fragFileName);
@@ -89,4 +87,8 @@ std::array<Shader::ShaderModuleInfo, 2> Shader::LoadShaderPrograms(std::string v
     std::array<ShaderModuleInfo, 2> result = { vertShaderModule, fragShaderModule };
 
     return result;
+}
+
+void Shader::Connect(VulkanDevice* device) {
+    _vulkanDevice = device;
 }

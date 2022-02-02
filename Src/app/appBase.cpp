@@ -124,7 +124,6 @@ public:
     struct glTFMaterial {
         glm::vec4 baseColorFactor = glm::vec4(1.0f);
         Texture* baseColorTexture = nullptr;
-        VkDescriptorSet descriptorSet;
     };
 
     struct Primitive {
@@ -249,7 +248,6 @@ private:
     VulkanDevice* _vulkanDevice;
 
     uint32_t _mipLevel;
-    VkQueue _queue;
 
     VkDescriptorPool _descriptorPool;
     VkDescriptorSet _uniformDescriptorSet;
@@ -258,6 +256,17 @@ private:
 namespace {
     //シングルトン
     glTF* s_gltf = nullptr;
+
+    std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        //Vulkan Raytracing API で必要
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        //VK_KHR_acceleration_structureで必要
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        //descriptor indexing に必要
+        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
+    };
 }
 
 glTF::glTF() {
@@ -479,7 +488,7 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage) {
 void glTF::LoadImages(tinygltf::Model& input) {
     for (tinygltf::Image& image : input.images) {
         Texture texture;
-        texture.Connect(_vulkanDevice, _queue);
+        texture.Connect(_vulkanDevice, _vulkanDevice->_graphicsQueue);
         texture.LoadglTFImages(image);
         _textures.push_back(texture);
     }
@@ -651,7 +660,6 @@ void glTF::LoadFromFile(std::string filename) {
     std::vector<Vertex> vertexBuffer;
 
     if (fileLoaded) {
-
         LoadImages(glTFInput);
         LoadglTFMaterials(glTFInput);
         const tinygltf::Scene& scene = glTFInput.scenes[0];
@@ -676,7 +684,7 @@ void glTF::LoadFromFile(std::string filename) {
 
     _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _vertices.buffer, _vertices.memory);
 
-    _vulkanDevice->CopyBuffer(vertexStaging.buffer, _vertices.buffer, _queue, vertexBufferSize);
+    _vulkanDevice->CopyBuffer(vertexStaging.buffer, _vertices.buffer, vertexBufferSize);
 
     vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
@@ -696,7 +704,7 @@ void glTF::LoadFromFile(std::string filename) {
 
     _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _indices.buffer, _indices.memory);
 
-    _vulkanDevice->CopyBuffer(indexStaging.buffer, _indices.buffer, _queue, indexBufferSize);
+    _vulkanDevice->CopyBuffer(indexStaging.buffer, _indices.buffer, indexBufferSize);
 
     vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
@@ -709,26 +717,25 @@ void glTF::LoadFromFile(std::string filename) {
 
 void glTF::CreateDescriptorPool() {
 
-    uint32_t imageCount = 0;
-    uint32_t uboCount = 0;
+    uint32_t textureCount = 0;
+    uint32_t uboCount = 1;
 
     std::vector<VkDescriptorPoolSize> poolSizes{};
     poolSizes.push_back({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , uboCount });
-    if (imageCount > 0) {
-        poolSizes.push_back({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER , imageCount });
+    
+    for (auto texture : _textures) {
+        textureCount++;
     }
 
-    for (auto material : _materials) {
-        if (material.baseColorTexture != nullptr) {
-            imageCount++;
-        }
+    if (textureCount > 0) {
+        poolSizes.push_back({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER , textureCount });
     }
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = imageCount + uboCount;
+    poolInfo.maxSets = textureCount + uboCount;
 
     if (vkCreateDescriptorPool(_vulkanDevice->_device, &poolInfo, nullptr, &_descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("failed to create descriptor pool!");
@@ -754,9 +761,9 @@ void glTF::CreateDescriptorSetLayout() {
     }
 
     VkDescriptorSetLayoutBinding samplerBinding{};
-    samplerBinding.binding = 1;
+    samplerBinding.binding = 0;
     samplerBinding.descriptorCount = 1;
-    samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     samplerBinding.pImmutableSamplers = nullptr;
     samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
@@ -765,73 +772,69 @@ void glTF::CreateDescriptorSetLayout() {
     imageLayoutInfo.bindingCount = 1;
     imageLayoutInfo.pBindings = &samplerBinding;
 
-    if (vkCreateDescriptorSetLayout(_vulkanDevice->_device, &uboLayoutInfo, nullptr, &_descriptorSetLayout.texture) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(_vulkanDevice->_device, &imageLayoutInfo, nullptr, &_descriptorSetLayout.texture) != VK_SUCCESS) {
         throw std::runtime_error("failed to create descriptor set layout!");
     }
 }
 
 void glTF::CreateDescriptorSets() {
 
-    for (auto node : _nodes) {
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = _descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &_descriptorSetLayout.matrix;
 
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = _descriptorPool;
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &_descriptorSetLayout.matrix;
+    if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &_uniformDescriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate descriptor sets!");
+    }
 
-        if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &_uniformDescriptorSet) != VK_SUCCESS) {
+    VkWriteDescriptorSet descriptorWrite{};
+
+    VkDescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = _uniformBuffer.buffer;
+    bufferInfo.offset = 0;
+    bufferInfo.range = sizeof(UniformBlock);
+
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = _uniformDescriptorSet;
+    descriptorWrite.dstBinding = 0;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pBufferInfo = &bufferInfo;
+
+    vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWrite, 0, nullptr);
+    
+
+    //テクスチャ
+    for (auto& texture : _textures) {
+
+        VkDescriptorSetAllocateInfo allocInfoMaterial{};
+        allocInfoMaterial.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfoMaterial.descriptorPool = _descriptorPool;
+        allocInfoMaterial.descriptorSetCount = 1;
+        allocInfoMaterial.pSetLayouts = &_descriptorSetLayout.texture;
+
+        if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfoMaterial, &texture.descriptorSet) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor sets!");
         }
 
-        VkWriteDescriptorSet descriptorWrite{};
+        VkDescriptorImageInfo imageInfo{};
 
-        VkDescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = _uniformBuffer.buffer;
-        bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(UniformBlock);
+        imageInfo.imageView = texture.textureImageView;
+        imageInfo.sampler = texture.textureSampler;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = _uniformDescriptorSet;
-        descriptorWrite.dstBinding = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo = &bufferInfo;
+        VkWriteDescriptorSet descriptorWriteMaterial{};
+        descriptorWriteMaterial.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWriteMaterial.dstSet = texture.descriptorSet;
+        descriptorWriteMaterial.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWriteMaterial.dstBinding = 0;
+        descriptorWriteMaterial.pImageInfo = &imageInfo;
+        descriptorWriteMaterial.descriptorCount = 1;
 
-        vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWrite, 0, nullptr);
-    }
-
-    //テクスチャ
-    for (auto& material : _materials) {
-        if (material.baseColorTexture != nullptr) {
-
-            VkDescriptorSetAllocateInfo allocInfoMaterial{};
-            allocInfoMaterial.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfoMaterial.descriptorPool = _descriptorPool;
-            allocInfoMaterial.descriptorSetCount = 1;
-            allocInfoMaterial.pSetLayouts = &_descriptorSetLayout.texture;
-
-            if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfoMaterial, &material.descriptorSet) != VK_SUCCESS) {
-                throw std::runtime_error("failed to allocate descriptor sets!");
-            }
-
-            VkDescriptorImageInfo imageInfo{};
-
-            imageInfo.imageView = material.baseColorTexture->textureImageView;
-            imageInfo.sampler = material.baseColorTexture->textureSampler;
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-            VkWriteDescriptorSet descriptorWriteMaterial{};
-            descriptorWriteMaterial.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWriteMaterial.dstSet = material.descriptorSet;
-            descriptorWriteMaterial.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            descriptorWriteMaterial.dstBinding = 0;
-            descriptorWriteMaterial.pImageInfo = &imageInfo;
-            descriptorWriteMaterial.descriptorCount = 1;
-
-            vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWriteMaterial, 0, nullptr);
-        }
+        vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWriteMaterial, 0, nullptr);
     }
 }
 
@@ -923,7 +926,7 @@ void glTF::Destroy() {
 }
 
 glTF* glTF::GetglTF() {
-    if (s_gltf = nullptr) {
+    if (s_gltf == nullptr) {
         s_gltf = new glTF();
     }
     return s_gltf;
@@ -1178,7 +1181,7 @@ void AppBase::PickupPhysicalDevice() {
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(_instance, &deviceCount, devices.data());
 
-    for (const auto& device : devices) {
+    for (VkPhysicalDevice device : devices) {
         
         if (_vulkanDevice->IsDeviceSuitable(device)) {
             _physicalDevice = device;
@@ -1557,6 +1560,7 @@ void AppBase::Initialize() {
     PickupPhysicalDevice();
 
     _vulkanDevice = new VulkanDevice();
+    _vulkanDevice->Connect(_physicalDevice);
     _vulkanDevice->CreateLogicalDevice();
 
     _swapchain = new Swapchain();
@@ -1566,16 +1570,17 @@ void AppBase::Initialize() {
 
     CreateRenderPass();
     
-    _shader = new Shader();
-    _shaderModules = _shader->LoadShaderPrograms("shaders/mesh.vert.spv", "shaders/mesh.frag.spv", _vulkanDevice);
-    CreateGraphicsPipeline(_shaderModules[0], _shaderModules[1]);
-    
     //load gltf model
+    _vulkanDevice->CreateCommandPool();
     glTF::GetglTF()->Connect(_vulkanDevice);
     glTF::GetglTF()->LoadFromFile("./models/flightHelmet/FlightHelmet.gltf");
     glTF::GetglTF()->CreateDescriptors();
 
-    _vulkanDevice->CreateCommandPool();
+    _shader = new Shader();
+    _shader->Connect(_vulkanDevice);
+    _shaderModules = _shader->LoadShaderPrograms("shaders/mesh.vert.spv", "shaders/mesh.frag.spv");
+    CreateGraphicsPipeline(_shaderModules[0], _shaderModules[1]);
+
     CreateDepthResources();
     CreateFramebuffers();
     CreateCommandBuffers();
@@ -1670,7 +1675,7 @@ void AppBase::drawFrame() {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
 
-    result = _swapchain->QueuePresent(_vulkanDevice->_presentQueue, imageIndex, *waitSemaphores);
+    result = _swapchain->QueuePresent(_vulkanDevice->_graphicsQueue, imageIndex, *waitSemaphores);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || _framebufferResized) {
         _framebufferResized = false;

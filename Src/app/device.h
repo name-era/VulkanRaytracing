@@ -9,6 +9,7 @@
 #include <set>
 
 #include <vulkan/vulkan.h>
+#include <extensions_vk.hpp>
 
 struct VulkanDevice {
 
@@ -28,17 +29,6 @@ struct VulkanDevice {
         uint32_t transfer;
     }_queueFamilyIndices;
 
-
-    const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        //Vulkan Raytracing API で必要.
-        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-        //VK_KHR_acceleration_structureで必要
-        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-        //descriptor indexing に必要
-        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-    };
 
     /**
     * @brief    メモリタイプを探す
@@ -63,7 +53,7 @@ struct VulkanDevice {
     /**
     * @brief    デバイスが使えるか確認する
     */
-    bool IsDeviceSuitable(VkPhysicalDevice device);
+    bool IsDeviceSuitable(VkPhysicalDevice& device);
 
     /**
     * @brief    コマンドプールを作成する
@@ -78,7 +68,7 @@ struct VulkanDevice {
     /**
     * @brief    バッファをコピーする
     */
-    void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkQueue queue, VkDeviceSize size);
+    void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
     /**
     * @brief    コマンドバッファの記録開始
@@ -101,6 +91,11 @@ struct VulkanDevice {
     VkFormat FindDepthFormat();
 
     /**
+    * @brief    初期化
+    */
+    void Connect(VkPhysicalDevice physicalDevice);
+
+    /**
     * @brief    破棄
     */
     void Destroy();
@@ -111,7 +106,6 @@ struct VulkanDevice {
     std::vector<VkQueueFamilyProperties> _queueFamilyProperties;
     VkCommandPool _commandPool;
     VkQueue _graphicsQueue;
-    VkQueue _presentQueue;
 
     float _angle = 0.f;
     float _cmeraPosX = 2.0f;

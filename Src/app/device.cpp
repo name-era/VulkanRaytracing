@@ -1,5 +1,17 @@
 #include "device.h"
 
+namespace {
+    std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        //Vulkan Raytracing API で必要
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        //VK_KHR_acceleration_structureで必要
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+        //descriptor indexing に必要
+        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
+    };
+}
 
 uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     
@@ -80,26 +92,30 @@ void VulkanDevice::CreateLogicalDevice() {
 
     //PhysicalDeviceが備える各種機能を使うための準備
     //バッファのデバイスアドレスを有効にする
-    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bufferDeviceAddressF;
-    bufferDeviceAddressF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bufferDeviceAddressF{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,nullptr
+    };
     bufferDeviceAddressF.bufferDeviceAddress = VK_TRUE;
     bufferDeviceAddressF.pNext = nullptr;
 
     //レイトレーシングパイプラインを使えるようにする
-    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineF;
-    rayTracingPipelineF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineF{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,nullptr
+    };
     rayTracingPipelineF.rayTracingPipeline = VK_TRUE;
     rayTracingPipelineF.pNext = &bufferDeviceAddressF;
 
     //Accelerationによるレイトレーシングを有効にする
-    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureF;
-    accelerationStructureF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureF{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,nullptr
+    };
     accelerationStructureF.accelerationStructure = VK_TRUE;
     accelerationStructureF.pNext = &rayTracingPipelineF;
 
     //ディスクリプタ配列を使えるようにする
-    VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingF;
-    descriptorIndexingF.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingF{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES
+    };
     descriptorIndexingF.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
     descriptorIndexingF.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
     descriptorIndexingF.runtimeDescriptorArray = VK_TRUE;
@@ -110,6 +126,7 @@ void VulkanDevice::CreateLogicalDevice() {
     VkPhysicalDeviceFeatures features{};
     vkGetPhysicalDeviceFeatures(_physicalDevice, &features);
     VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
+    physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     physicalDeviceFeatures2.features = features;
     physicalDeviceFeatures2.pNext = &descriptorIndexingF;
 
@@ -121,7 +138,6 @@ void VulkanDevice::CreateLogicalDevice() {
     }
 
     vkGetDeviceQueue(_device, _queueFamilyIndices.graphics, 0, &_graphicsQueue);
-    vkGetDeviceQueue(_device, _queueFamilyIndices.graphics, 0, &_presentQueue);
 }
 
 bool VulkanDevice::CheckDeviceExtensionSupport(VkPhysicalDevice device) {
@@ -140,7 +156,7 @@ bool VulkanDevice::CheckDeviceExtensionSupport(VkPhysicalDevice device) {
     return requiredExtensions.empty();
 }
 
-bool VulkanDevice::IsDeviceSuitable(VkPhysicalDevice device) {
+bool VulkanDevice::IsDeviceSuitable(VkPhysicalDevice& device) {
 
     bool extensionsSupported = CheckDeviceExtensionSupport(device);
 
@@ -220,7 +236,7 @@ void VulkanDevice::EndSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue 
     vkFreeCommandBuffers(_device, _commandPool, 1, &commandBuffer);
 }
 
-void VulkanDevice::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkQueue queue, VkDeviceSize size) {
+void VulkanDevice::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
     VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
 
     VkBufferCopy copyRegion{};
@@ -228,7 +244,7 @@ void VulkanDevice::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkQueue qu
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
     //転送を完了する
-    EndSingleTimeCommands(commandBuffer, queue);
+    EndSingleTimeCommands(commandBuffer, _graphicsQueue);
 }
 
 VkFormat VulkanDevice::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
@@ -254,6 +270,10 @@ VkFormat VulkanDevice::FindDepthFormat() {
         VK_IMAGE_TILING_OPTIMAL,
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
     );
+}
+
+void VulkanDevice::Connect(VkPhysicalDevice physicalDevice) {
+    _physicalDevice = physicalDevice;
 }
 
 void VulkanDevice::Destroy() {

@@ -262,7 +262,7 @@ void Gui::Present(uint32_t index) {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
 
-    result = _swapchain->QueuePresent(_vulkanDevice->_presentQueue, imageIndex, *waitSemaphores);
+    result = _swapchain->QueuePresent(_vulkanDevice->_graphicsQueue, imageIndex, *waitSemaphores);
 }
 
 void Gui::Render(uint32_t imageIndex) {
