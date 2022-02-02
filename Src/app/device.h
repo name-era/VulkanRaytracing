@@ -79,7 +79,7 @@ struct VulkanDevice {
     /**
     * @brief    コマンドバッファの記録終了
     */
-    void EndSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue);
+    void EndSingleTimeCommands(VkCommandBuffer& commandBuffer, VkQueue& queue);
 
     /**
     * @brief    サポートしているフォーマットを見つける

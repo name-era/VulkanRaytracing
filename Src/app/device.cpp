@@ -222,7 +222,7 @@ VkCommandBuffer VulkanDevice::BeginSingleTimeCommands() {
     return commandBuffer;
 }
 
-void VulkanDevice::EndSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue) {
+void VulkanDevice::EndSingleTimeCommands(VkCommandBuffer& commandBuffer, VkQueue& queue) {
     vkEndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo{};

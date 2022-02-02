@@ -123,7 +123,7 @@ public:
 
     struct glTFMaterial {
         glm::vec4 baseColorFactor = glm::vec4(1.0f);
-        Texture* baseColorTexture = nullptr;
+        uint32_t textureIndex;
     };
 
     struct Primitive {
@@ -171,6 +171,7 @@ public:
     void LoadImages(tinygltf::Model& gltfModel);
     Texture* GetTexture(uint32_t index);
     void LoadglTFMaterials(tinygltf::Model& input);
+    void LoadTextureIndices(tinygltf::Model& input);
     void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
     void LoadFromFile(std::string filename);
 
@@ -240,6 +241,7 @@ public:
 
 private:
     std::vector<Texture> _textures;
+    std::vector<uint32_t> _textureIndices;
     std::vector<glTFMaterial> _materials;
     std::vector<Node> _nodes;
 
@@ -520,9 +522,15 @@ void glTF::LoadglTFMaterials(tinygltf::Model& input) {
         }
         //texture
         if (material.values.find("baseColorTexture") != material.values.end()) {
-            _materials[i].baseColorTexture = GetTexture(input.textures[material.values["baseColorTexture"].TextureIndex()].source);
-
+            _materials[i].textureIndex = material.values["baseColorTexture"].TextureIndex();
         }
+    }
+}
+
+void glTF::LoadTextureIndices(tinygltf::Model& input) {
+    _textureIndices.resize(input.textures.size());
+    for (uint32_t i = 0; i < input.textures.size(); i++) {
+        _textureIndices[i] = input.textures[i].source;
     }
 }
 
@@ -663,6 +671,7 @@ void glTF::LoadFromFile(std::string filename) {
     if (fileLoaded) {
         LoadImages(glTFInput);
         LoadglTFMaterials(glTFInput);
+        LoadTextureIndices(glTFInput);
         const tinygltf::Scene& scene = glTFInput.scenes[0];
         for (size_t i = 0; i < scene.nodes.size(); i++) {
             const tinygltf::Node node = glTFInput.nodes[scene.nodes[i]];
@@ -689,7 +698,6 @@ void glTF::LoadFromFile(std::string filename) {
 
     vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
-
 
     //index buffer
     VkDeviceSize indexBufferSize = indexBuffer.size() * sizeof(uint32_t);
@@ -865,8 +873,9 @@ void glTF::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLa
 
         for (Primitive& primitive : node.primitive) {
             if (primitive.indexCount > 0) {
+                uint32_t index = _textureIndices[_materials[primitive.materialIndex].textureIndex];
                 //現在のプリミティブのテクスチャにディスクリプタをバインドする
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &_textures[primitive.materialIndex].descriptorSet, 0, nullptr);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &_textures[index].descriptorSet, 0, nullptr);
                 vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
             }
         }
@@ -894,8 +903,8 @@ void glTF::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view) {
     _ubo.model = view;
 
     void* data;
-    vkMapMemory(_vulkanDevice->_device, _uniformBuffer.memory, 0, sizeof(UniformBlock), 0, &data);
-    memcpy(data, &_uniformBuffer.memory, sizeof(UniformBlock));
+    vkMapMemory(_vulkanDevice->_device, _uniformBuffer.memory, 0, sizeof(_ubo), 0, &data);
+    memcpy(data, &_ubo, sizeof(_ubo));
     vkUnmapMemory(_vulkanDevice->_device, _uniformBuffer.memory);
 
 }
@@ -1513,7 +1522,7 @@ void AppBase::CreateCommandBuffers() {
         renderPassInfo.renderArea.extent = _swapchain->_extent;
 
         std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.f, 0.f, 0.f, 1.0f} };
+        clearValues[0].color = { {0.3f, 0.f, 0.f, 1.0f} };
         clearValues[1].depthStencil = { 1.0f, 0 };
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
