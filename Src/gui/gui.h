@@ -18,6 +18,54 @@ class Gui {
 
 public:
 
+    struct PushConstBlock {
+        glm::vec2 scale;
+        glm::vec2 translate;
+    } _pushConstBlock;
+
+    struct UIVert
+    {
+        ImVec2  pos;
+        ImVec2  uv;
+        ImU32   color;
+
+        static VkVertexInputBindingDescription getBindingDescription() {
+            VkVertexInputBindingDescription bindingDescription{};
+            bindingDescription.binding = 0;
+            bindingDescription.stride = sizeof(ImDrawVert);
+            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+            return bindingDescription;
+        }
+
+        static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
+
+            std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
+
+            attributeDescriptions[0].binding = 0;
+            attributeDescriptions[0].location = 0;
+            attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attributeDescriptions[0].offset = offsetof(UIVert, pos);
+
+            attributeDescriptions[1].binding = 0;
+            attributeDescriptions[1].location = 1;
+            attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attributeDescriptions[1].offset = offsetof(UIVert, uv);
+
+            attributeDescriptions[2].binding = 0;
+            attributeDescriptions[2].location = 2;
+            attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attributeDescriptions[2].offset = offsetof(UIVert, color);
+
+            return attributeDescriptions;
+        }
+    };
+
+    struct ShaderModule {
+        Shader::ShaderModuleInfo vert;
+        Shader::ShaderModuleInfo frag;
+    }_shaderModules;
+
     void SetMousePos(float x, float y);
 
     /**
@@ -58,7 +106,7 @@ public:
     /**
     * @brief    パイプラインの作成
     */
-    void PreparePipeline();
+    void CreateGraphicsPipeline();
 
 
 
@@ -98,16 +146,15 @@ private:
     VkPipeline _pipeline;
     VkPipelineLayout _pipelineLayout;
 
-    std::array<Shader::ShaderModuleInfo, 2> _shaderModules;
 
     struct PushConstBlock {
         glm::vec2 scale;
         glm::vec2 translate;
     } pushConstBlock;
 
-    common::Buffer _vertexBuffer;
-    common::Buffer _indexBuffer;
-    common::Image _fontImage;
+    Initializers::Buffer _vertexBuffer;
+    Initializers::Buffer _indexBuffer;
+    Initializers::Image _fontImage;
     VkCommandBuffer _commandBuffer;
     VkDescriptorPool _descriptorPool;
     VkDescriptorSetLayout _descriptorSetLayout;

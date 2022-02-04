@@ -46,6 +46,11 @@ public:
         std::vector<BindingInfo> bindingInfo;
     };
 
+    struct ShaderModule {
+        Shader::ShaderModuleInfo vert;
+        Shader::ShaderModuleInfo frag;
+    };
+
 
     //シェーダファイルを読み込む
     static std::vector<char> ReadFile(const std::string& filename);
@@ -57,7 +62,7 @@ public:
     ShaderModuleInfo CreateShaderModule(const std::vector<char>& code, VkShaderStageFlagBits stage);
 
     //シェーダーファイルを読み込んでシェーダーモジュールを作成する
-    std::array<ShaderModuleInfo, 2> LoadShaderPrograms(std::string vertFileName, std::string fragFileName);
+    ShaderModule LoadShaderPrograms(std::string vertFileName, std::string fragFileName);
   
 
     void Connect(VulkanDevice* device);

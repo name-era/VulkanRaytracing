@@ -3,7 +3,7 @@
 
 #include <vulkan/vulkan.h>
 
-namespace common {
+namespace Initializers {
 	struct Buffer {
 		VkBuffer buffer;
 		VkDeviceMemory memory;
@@ -15,4 +15,6 @@ namespace common {
 		VkImageView view;
 		VkSampler sampler;
 	};
+
+
 }

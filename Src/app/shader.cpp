@@ -76,7 +76,7 @@ Shader::ShaderModuleInfo Shader::CreateShaderModule(const std::vector<char>& cod
     return module;
 }
 
-std::array<Shader::ShaderModuleInfo, 2> Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName) {
+Shader::ShaderModule Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName) {
 
     auto vertShaderCode = ReadFile(vertFileName);
     auto fragShaderCode = ReadFile(fragFileName);
