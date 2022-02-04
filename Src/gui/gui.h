@@ -1,5 +1,6 @@
 #pragma once
 
+
 #include <vector>
 #include <array>
 
@@ -8,68 +9,112 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 #include <glfw3.h>
+#include <glm/glm.hpp>
 
 #include "device.h"
-#include "swapchain.h"
+#include "shader.h"
 
 class Gui {
 
 public:
-    /**
-    * @brief    レンダーパスを作成する
-    */
-    void CreateRenderPass();
+
+    void SetMousePos(float x, float y);
 
     /**
     * @brief    イメージを作成する
     */
-    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+    void CreateImage(uint32_t width, uint32_t height, VkImage& image, VkDeviceMemory& imageMemory);
+
+    /**
+    * @brief    イメージレイアウトの指定
+    */
+    void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
+    
+    /**
+    * @brief    バッファをイメージにコピーする
+    */
+    void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+
+    /**
+    * @brief    イメージの準備
+    */
+    void PrepareImage();
 
     /**
     * @brief    イメージビューを作成する
     */
-    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
+    VkImageView CreateImageView(VkImage& image, VkImageView& imageView);
+    
+    /**
+    * @brief    サンプラーを作成する
+    */
+    void CreateSampler();
 
     /**
-    * @brief    デプスリソースを作成する
+    * @brief    ディスクリプタセットの作成
     */
-    void CreateDepthResources();
+    void CreateDescriptorSet();
+
+    /**
+    * @brief    パイプラインの作成
+    */
+    void PreparePipeline();
+
+
+
 
     /**
     * @brief    フレームバッファを作成する
     */
     void CreateFrameBuffers(VkImageView imageView);
-    void CreateCommandPool();
-    void CreateSemaphore();
-    void CreateDescriptorPool();
-    void PrepareImGui(GLFWwindow* window, VkInstance& instance);
-    void Present(uint32_t index);
-    void Render(uint32_t imageIndex);
-    void Draw();
+    /**
+    * @brief    レンダーパスを作成する
+    */
+    void CreateRenderPass();
+
+    
+    void PrepareImGui(VkInstance& instance, VkCommandPool& commandBuffers);
+    void Draw(VkCommandBuffer commandBuffer);
     void Cleanup();
     void Recreate();
     void Destroy();
-    void Connect(VulkanDevice* device);
+    void Connect(VulkanDevice* device, VkQueue& queue);
 
 private:
 
+    glm::vec2 mousePos;
+
+
     VulkanDevice* _vulkanDevice;
+    Shader* _shader;
+    VkQueue _queue;
+
 
     //ImGui
-    Swapchain* _swapchain;
-    VkDescriptorPool _descriptorPool;
     VkRenderPass _renderPass;
-    VkCommandPool _commandPool;
-    VkCommandBuffer _commandBuffer;
     std::vector<VkFramebuffer> _frameBuffers;
 
-    //depth
-    VkImage _depthImage;
-    VkDeviceMemory _depthImageMemory;
-    VkImageView _depthImageView;
+    //new
+    VkPipeline _pipeline;
+    VkPipelineLayout _pipelineLayout;
 
-    VkSemaphore _presentCompleteSemaphore;
-    VkSemaphore _renderCompleteSemaphore;
-    VkFence _renderFences;
-    uint32_t _index;
+    std::array<Shader::ShaderModuleInfo, 2> _shaderModules;
+
+    struct PushConstBlock {
+        glm::vec2 scale;
+        glm::vec2 translate;
+    } pushConstBlock;
+
+    common::Buffer _vertexBuffer;
+    common::Buffer _indexBuffer;
+    common::Image _fontImage;
+    VkCommandBuffer _commandBuffer;
+    VkDescriptorPool _descriptorPool;
+    VkDescriptorSetLayout _descriptorSetLayout;
+    VkDescriptorSet _descriptorSet;
+
+
+    const uint32_t _width = 200;
+    const uint32_t _height = 200;
+
 };

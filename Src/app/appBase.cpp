@@ -1535,6 +1535,8 @@ void AppBase::CreateCommandBuffers() {
         vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout, 0, 1, &s_gltf->_uniformDescriptorSet, 0, nullptr);
 
         glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
+
+        _gui->Draw(_commandBuffers[i]);
         
         vkCmdEndRenderPass(_commandBuffers[i]);
 
@@ -1583,7 +1585,7 @@ void AppBase::Initialize() {
     //load gltf model
     _vulkanDevice->CreateCommandPool();
     glTF::GetglTF()->Connect(_vulkanDevice);
-    glTF::GetglTF()->LoadFromFile("./models/flightHelmet/FlightHelmet.gltf");
+    glTF::GetglTF()->LoadFromFile(".Assets/flightHelmet/FlightHelmet.gltf");
     glTF::GetglTF()->CreateDescriptors();
 
     _shader = new Shader();
@@ -1597,8 +1599,8 @@ void AppBase::Initialize() {
     CreateSyncObjects();
 
     _gui = new Gui();
-    //_gui->Connect(_vulkanDevice);
-    //_gui->PrepareImGui(_window, _instance);
+    _gui->Connect(_vulkanDevice);
+    _gui->PrepareImGui(_instance, _vulkanDevice->_commandPool);
 
     _camera = new Camera();
     _camera->type = Camera::CameraType::lookat;
@@ -1637,7 +1639,7 @@ void AppBase::RecreateSwapChain() {
     CreateCommandBuffers();
 
     _camera->UpdateAspectRatio((float)width / (float)height);
-    //_gui->Recreate();
+    _gui->Recreate();
     vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
@@ -1699,6 +1701,7 @@ void AppBase::Run() {
 
         glfwPollEvents();
         drawFrame();
+        _gui->UpdateOverLay();
         glTF::GetglTF()->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
     }
     vkDeviceWaitIdle(_vulkanDevice->_device);
@@ -1728,7 +1731,7 @@ void AppBase::CleanupSwapchain() {
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
     
     glTF::GetglTF()->Cleanup();
-    //_gui->Cleanup();
+    _gui->Cleanup();
 }
 
 void AppBase::Destroy() {
@@ -1736,7 +1739,7 @@ void AppBase::Destroy() {
     CleanupSwapchain();
     
     glTF::GetglTF()->Destroy();
-    //_gui->Destroy();
+    _gui->Destroy();
 
     vkDestroySemaphore(_vulkanDevice->_device, _renderCompleteSemaphore, nullptr);
     vkDestroySemaphore(_vulkanDevice->_device, _presentCompleteSemaphore, nullptr);

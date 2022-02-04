@@ -213,6 +213,7 @@ public:
     VkPipeline _pipeline;
     std::vector<VkFramebuffer> _frameBuffers;
 
+
     uint32_t _mipLevels;
 
 
@@ -222,7 +223,7 @@ public:
     VkImageView _depthImageView;
 
 
-
+    VkCommandPool _commandPool;
     std::vector<VkCommandBuffer> _commandBuffers;
     VkSemaphore _presentCompleteSemaphore;
     VkSemaphore _renderCompleteSemaphore;
