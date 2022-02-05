@@ -61,12 +61,6 @@ public:
         }
     };
 
-    struct ShaderModule {
-        Shader::ShaderModuleInfo vert;
-        Shader::ShaderModuleInfo frag;
-    }_shaderModules;
-
-    void SetMousePos(float x, float y);
 
     /**
     * @brief    イメージを作成する
@@ -91,7 +85,7 @@ public:
     /**
     * @brief    イメージビューを作成する
     */
-    VkImageView CreateImageView(VkImage& image, VkImageView& imageView);
+    void CreateImageView();
     
     /**
     * @brief    サンプラーを作成する
@@ -108,58 +102,50 @@ public:
     */
     void CreateGraphicsPipeline();
 
-
-
+    /**
+    * @brief    UIの準備
+    */
+    void PrepareUI(VkInstance& instance, VkCommandPool& commandBuffers);
 
     /**
-    * @brief    フレームバッファを作成する
+    * @brief    UIの更新
     */
-    void CreateFrameBuffers(VkImageView imageView);
-    /**
-    * @brief    レンダーパスを作成する
-    */
-    void CreateRenderPass();
+    void UpdateUI(float frameTimer, Initializers::MouseButtons mouseButtons, glm::vec2 mousePos);
 
-    
-    void PrepareImGui(VkInstance& instance, VkCommandPool& commandBuffers);
+    /**
+    * @brief    描画
+    */
     void Draw(VkCommandBuffer commandBuffer);
+
     void Cleanup();
     void Recreate();
+
+    /**
+    * @brief    破棄
+    */
     void Destroy();
     void Connect(VulkanDevice* device, VkQueue& queue);
 
 private:
 
-    glm::vec2 mousePos;
-
-
     VulkanDevice* _vulkanDevice;
     Shader* _shader;
     VkQueue _queue;
 
-
-    //ImGui
-    VkRenderPass _renderPass;
-    std::vector<VkFramebuffer> _frameBuffers;
-
-    //new
-    VkPipeline _pipeline;
-    VkPipelineLayout _pipelineLayout;
-
-
-    struct PushConstBlock {
-        glm::vec2 scale;
-        glm::vec2 translate;
-    } pushConstBlock;
-
     Initializers::Buffer _vertexBuffer;
     Initializers::Buffer _indexBuffer;
     Initializers::Image _fontImage;
-    VkCommandBuffer _commandBuffer;
+
+    //pipeline
+    VkPipelineLayout _pipelineLayout;
+    VkPipeline _pipeline;
+
+    //descriptor
     VkDescriptorPool _descriptorPool;
     VkDescriptorSetLayout _descriptorSetLayout;
     VkDescriptorSet _descriptorSet;
-
+    
+    Shader::ShaderModules _shaderModules;
 
     const uint32_t _width = 200;
     const uint32_t _height = 200;

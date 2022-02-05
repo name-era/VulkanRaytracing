@@ -76,7 +76,7 @@ Shader::ShaderModuleInfo Shader::CreateShaderModule(const std::vector<char>& cod
     return module;
 }
 
-Shader::ShaderModule Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName) {
+Shader::ShaderModules Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName) {
 
     auto vertShaderCode = ReadFile(vertFileName);
     auto fragShaderCode = ReadFile(fragFileName);
@@ -84,7 +84,7 @@ Shader::ShaderModule Shader::LoadShaderPrograms(std::string vertFileName, std::s
     ShaderModuleInfo vertShaderModule = CreateShaderModule(vertShaderCode, VK_SHADER_STAGE_VERTEX_BIT);
     ShaderModuleInfo fragShaderModule = CreateShaderModule(fragShaderCode, VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    std::array<ShaderModuleInfo, 2> result = { vertShaderModule, fragShaderModule };
+    Shader::ShaderModules result = { vertShaderModule, fragShaderModule };
 
     return result;
 }

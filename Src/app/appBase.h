@@ -23,23 +23,12 @@
 #include "swapchain.h"
 #include "gui.h"
 #include "shader.h"
+#include "common.h"
 
-const uint32_t WIDTH = 1280;
-const uint32_t HEIGHT = 720;
 
 
 class AppBase
 {
-public:
-
-    struct {
-        bool left = false;
-        bool right = false;
-        bool middle = false;
-    } mouseButtons;
-
-
-    bool _framebufferResized;
 
 public:
 
@@ -111,7 +100,7 @@ public:
     /**
     * @brief    グラフィックスパイプラインを作成する
     */
-    void CreateGraphicsPipeline(Shader::ShaderModuleInfo vertModule, Shader::ShaderModuleInfo fragModule);
+    void CreateGraphicsPipeline();
 
     /**
     * @brief    イメージの作成
@@ -231,10 +220,12 @@ public:
     VkFence _renderFences;
 
 
-    glm::vec2 mousePos;
+    glm::vec2 _mousePos;
     bool viewUpdated = false;
-    float frameTimer = 1.0f;
+    float frameTimer = 0.0f;
+    Initializers::MouseButtons _mouseButtons;
+    bool _framebufferResized;
 
-    std::array<Shader::ShaderModuleInfo, 2> _shaderModules;
+    Shader::ShaderModules _shaderModules;
 
 };

@@ -28,7 +28,6 @@ uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags
 
 uint32_t VulkanDevice::FindQueueFamilyIndex(VkQueueFlagBits queueFlags) {
 
-
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(_physicalDevice, &queueFamilyCount, nullptr);
 
@@ -65,6 +64,8 @@ uint32_t VulkanDevice::FindQueueFamilyIndex(VkQueueFlagBits queueFlags) {
             }
         }
     }
+
+    return 0;
 }
 
 void VulkanDevice::CreateLogicalDevice() {

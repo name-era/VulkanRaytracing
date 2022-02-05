@@ -1,6 +1,5 @@
 #include "gui.h"
 
-
 void Gui::CreateImage(uint32_t width, uint32_t height, VkImage& image, VkDeviceMemory& imageMemory) {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -141,10 +140,10 @@ void Gui::PrepareImage() {
     vkFreeMemory(_vulkanDevice->_device, stagingBufferMemory, nullptr);
 }
 
-VkImageView Gui::CreateImageView(VkImage& image, VkImageView& imageView) {
+void Gui::CreateImageView() {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = image;
+    viewInfo.image = _fontImage.image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = SRGBCOLORFORMAT;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -153,7 +152,7 @@ VkImageView Gui::CreateImageView(VkImage& image, VkImageView& imageView) {
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
-    if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+    if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &_fontImage.view) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
     }
 }
@@ -371,131 +370,72 @@ void Gui::CreateGraphicsPipeline() {
     vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.frag.handle, nullptr);
 }
 
+void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool) {
 
-
-void Gui::CreateFrameBuffers(VkImageView imageView) {
-    
-    VkImageView attachment = {imageView};
-
-    VkFramebufferCreateInfo info = {};
-    info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    info.renderPass = _renderPass;
-    info.attachmentCount = 1;
-    info.pAttachments = &attachment;
-    info.width = _swapchain->_extent.width;
-    info.height = _swapchain->_extent.height;
-    info.layers = 1;
-
-    VkFramebuffer frameBuffer;
-    vkCreateFramebuffer(_vulkanDevice->_device, &info, nullptr, &frameBuffer);
-    _frameBuffers.push_back(frameBuffer);
-}
-
-
-void Gui::SetMousePos(float x, float y) {
-
-}
-
-void Gui::CreateRenderPass() {
-
-    VkAttachmentDescription colorAttachment = {};
-    colorAttachment.format = SRGBCOLORFORMAT;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = _vulkanDevice->FindDepthFormat();
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference color_attachment = {};
-    color_attachment.attachment = 0;
-    color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &color_attachment;
-
-    VkSubpassDependency dependency = {};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-    std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
-
-    VkRenderPassCreateInfo info = {};
-    info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    info.attachmentCount = attachments.size();
-    info.pAttachments = attachments.data();
-    info.subpassCount = 1;
-    info.pSubpasses = &subpass;
-    info.dependencyCount = 1;
-    info.pDependencies = &dependency;
-    if (vkCreateRenderPass(_vulkanDevice->_device, &info, nullptr, &_renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("Could not create Dear ImGui's render pass");
-    }
-}
-
-void Gui::PrepareImGui(VkInstance& instance, VkCommandPool& commandPool) {
+    ImGui::CreateContext();
+    //color
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.Colors[ImGuiCol_TitleBg] = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+    style.Colors[ImGuiCol_TitleBgActive] = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+    style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(1.0f, 0.0f, 0.0f, 0.1f);
+    style.Colors[ImGuiCol_MenuBarBg] = ImVec4(1.0f, 0.0f, 0.0f, 0.4f);
+    style.Colors[ImGuiCol_Header] = ImVec4(0.8f, 0.0f, 0.0f, 0.4f);
+    style.Colors[ImGuiCol_HeaderActive] = ImVec4(1.0f, 0.0f, 0.0f, 0.4f);
+    style.Colors[ImGuiCol_HeaderHovered] = ImVec4(1.0f, 0.0f, 0.0f, 0.4f);
+    style.Colors[ImGuiCol_FrameBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.8f);
+    style.Colors[ImGuiCol_CheckMark] = ImVec4(1.0f, 0.0f, 0.0f, 0.8f);
+    style.Colors[ImGuiCol_SliderGrab] = ImVec4(1.0f, 0.0f, 0.0f, 0.4f);
+    style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(1.0f, 0.0f, 0.0f, 0.8f);
+    style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(1.0f, 1.0f, 1.0f, 0.1f);
+    style.Colors[ImGuiCol_FrameBgActive] = ImVec4(1.0f, 1.0f, 1.0f, 0.2f);
+    style.Colors[ImGuiCol_Button] = ImVec4(1.0f, 0.0f, 0.0f, 0.4f);
+    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(1.0f, 0.0f, 0.0f, 0.6f);
+    style.Colors[ImGuiCol_ButtonActive] = ImVec4(1.0f, 0.0f, 0.0f, 0.8f);
+    ImGuiIO& io = ImGui::GetIO();
+    io.FontGlobalScale = 1.0f;
 
     _shaderModules = _shader->LoadShaderPrograms("shaders/mesh.vert.spv", "shaders/mesh.frag.spv");
     
     PrepareImage();
-    CreateImageView(_fontImage.image, _fontImage.view);
+    CreateImageView();
     CreateSampler();
 
-    CreateDescriptorPool();
     CreateDescriptorSet();
+    CreateGraphicsPipeline();
+}
 
+void Gui::UpdateUI(float frameTimer, Initializers::MouseButtons mouseButtons, glm::vec2 mousePos) {
 
-
-
-    CreateRenderPass();
-
-
-
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
     ImGuiIO& io = ImGui::GetIO();
+    io.DisplaySize = ImVec2((float)WIDTH, (float)HEIGHT);
+    io.DeltaTime = frameTimer;
 
-    ImGui_ImplGlfw_InitForVulkan(_window, true);
+    io.MousePos = ImVec2(mousePos.x, mousePos.y);
+    io.MouseDown[0] = mouseButtons.left;
+    io.MouseDown[1] = mouseButtons.right;
 
 
-    ImGui_ImplVulkan_InitInfo info{};
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("Info");
+    ImGui::Text("Framerate(avg) %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     
-    info.Instance = instance;
-    info.PhysicalDevice = _vulkanDevice->_physicalDevice;
-    info.Device = _vulkanDevice->_device;
-    info.QueueFamily = _vulkanDevice->_queueFamilyIndices.graphics;
-    info.Queue = _vulkanDevice->_queue;
-    info.PipelineCache = VK_NULL_HANDLE;
-    info.DescriptorPool = _descriptorPool;
-    info.Allocator = nullptr;
-    info.MinImageCount = _swapchain->_minImageCount + 1;
-    info.ImageCount = _swapchain->_minImageCount + 1;
-    info.CheckVkResultFn = nullptr;
-    ImGui_ImplVulkan_Init(&info, _renderPass);
+    if (ImGui::Button("Button"))
+    {
 
-    //upload fonts
-    VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
-    ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
-    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_queue);
-    ImGui_ImplVulkan_DestroyFontUploadObjects();
+    }
+
+    ImGui::SliderFloat("Rotate", &_vulkanDevice->_angle, 0.0f, 360.0f);
+    ImGui::SliderFloat("PosX", &_vulkanDevice->_cmeraPosX, 2.0f, 10.0f);
+    ImGui::SliderFloat("PosY", &_vulkanDevice->_cameraPosY, 2.0f, 10.0f);
+    ImGui::SliderFloat("PosZ", &_vulkanDevice->_cameraPsZ, 2.0f, 10.0f);
+
+    ImGui::ColorPicker4("Color", _vulkanDevice->_color);
+    ImGui::End();
+    ImGui::Render();
+
 }
 
 void Gui::Draw(VkCommandBuffer commandBuffer) {
@@ -508,9 +448,9 @@ void Gui::Draw(VkCommandBuffer commandBuffer) {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout, 0, 1, &_descriptorSet, 0, NULL);
 
-    pushConstBlock.scale = glm::vec2(2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y);
-    pushConstBlock.translate = glm::vec2(-1.0f);
-    vkCmdPushConstants(commandBuffer, _pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstBlock), &pushConstBlock);
+    _pushConstBlock.scale = glm::vec2(2.0f / io.DisplaySize.x, 2.0f / io.DisplaySize.y);
+    _pushConstBlock.translate = glm::vec2(-1.0f);
+    vkCmdPushConstants(commandBuffer, _pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstBlock), &_pushConstBlock);
 
     VkDeviceSize offsets[1] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &_vertexBuffer.buffer, offsets);
@@ -536,37 +476,32 @@ void Gui::Draw(VkCommandBuffer commandBuffer) {
 }
 
 void Gui::Cleanup() {
-    for (auto framebuffer : _frameBuffers) {
-        vkDestroyFramebuffer(_vulkanDevice->_device, framebuffer, nullptr);
-    }
 
-    vkFreeCommandBuffers(_vulkanDevice->_device, _commandPool, 1, &_commandBuffer);
-    vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
-    _swapchain->Cleanup();
 }
 
 void Gui::Recreate() {
     
-    Cleanup();
-    
-    ImGui_ImplVulkan_SetMinImageCount(_swapchain->_minImageCount + 1);
-    _swapchain->CreateSwapChain();
-    CreateRenderPass();
-    for (uint32_t i = 0; i < _swapchain->_imageCount; i++) {
-        CreateFrameBuffers(_swapchain->_swapchainBuffers[i].imageview);
-    }
-
-    VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
-    ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
-    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_queue);
-    ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 
 void Gui::Destroy() {
     
-    vkDestroyCommandPool(_vulkanDevice->_device, _commandPool, nullptr);
-    vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
+    vkDestroyBuffer(_vulkanDevice->_device, _vertexBuffer.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, _vertexBuffer.memory, nullptr);
 
+    vkDestroyBuffer(_vulkanDevice->_device, _indexBuffer.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, _indexBuffer.memory, nullptr);
+
+    vkDestroyBuffer(_vulkanDevice->_device, _vertexBuffer.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, _vertexBuffer.memory, nullptr);
+
+    vkDestroySampler(_vulkanDevice->_device, _fontImage.sampler, nullptr);
+    vkDestroyImageView(_vulkanDevice->_device, _fontImage.view, nullptr);
+    vkDestroyImage(_vulkanDevice->_device, _fontImage.image, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, _fontImage.memory, nullptr);
+    
+    vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout, nullptr);
+    vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
+    
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

@@ -169,7 +169,6 @@ public:
 
 
     void LoadImages(tinygltf::Model& gltfModel);
-    Texture* GetTexture(uint32_t index);
     void LoadglTFMaterials(tinygltf::Model& input);
     void LoadTextureIndices(tinygltf::Model& input);
     void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
@@ -501,12 +500,6 @@ void glTF::Texture::Connect(VulkanDevice* device, VkQueue transQueue) {
 
     vulkanDevice = device;
     queue = transQueue;
-}
-
-glTF::Texture* glTF::GetTexture(uint32_t index) {
-    if (index < _textures.size()) {
-        return &_textures[index];
-    }
 }
 
 void glTF::LoadglTFMaterials(tinygltf::Model& input) {
@@ -978,35 +971,35 @@ static void mouseButton(GLFWwindow* window, int button, int action, int modsy) {
 
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
             //とりあえず左だけ
-            instance->mouseButtons.left = true;
+            instance->_mouseButtons.left = true;
         }
         else if (action == GLFW_RELEASE) {
-            instance->mouseButtons.left = false;
-            instance->mouseButtons.middle = false;
-            instance->mouseButtons.right = false;
+            instance->_mouseButtons.left = false;
+            instance->_mouseButtons.middle = false;
+            instance->_mouseButtons.right = false;
         }
     }
 }
 
 void AppBase::MouseMove(double x, double y) {
-    double dx = mousePos.x - x;
-    double dy = mousePos.y - y;
+    double dx = _mousePos.x - x;
+    double dy = _mousePos.y - y;
     bool handled = false;
 
-    if (mouseButtons.left) {
+    if (_mouseButtons.left) {
         _camera->rotate(glm::vec3(dy * _camera->rotationSpeed, -dx * _camera->rotationSpeed, 0.0f));
         viewUpdated = true;
     }
-    if (mouseButtons.right) {
+    if (_mouseButtons.right) {
         _camera->translate(glm::vec3(-0.0f, 0.0f, dy * 0.05f));
         viewUpdated = true;
     }
-    if (mouseButtons.middle) {
+    if (_mouseButtons.middle) {
         _camera->translate(glm::vec3(-dx * 0.01f, -dy * 0.01f, 0.0f));
         viewUpdated = true;
     }
     //マウス位置保存
-    mousePos = glm::vec2((float)x, (float)y);
+    _mousePos = glm::vec2((float)x, (float)y);
 }
 
 //カーソル入力
@@ -1268,18 +1261,18 @@ void AppBase::CreateRenderPass() {
     }
 }
 
-void AppBase::CreateGraphicsPipeline(Shader::ShaderModuleInfo vertModule, Shader::ShaderModuleInfo fragModule) {
+void AppBase::CreateGraphicsPipeline() {
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertModule.handle;
+    vertShaderStageInfo.module = _shaderModules.vert.handle;
     vertShaderStageInfo.pName = "main";
-
+    
     VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
     fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragModule.handle;
+    fragShaderStageInfo.module = _shaderModules.frag.handle;
     fragShaderStageInfo.pName = "main";
 
     VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
@@ -1396,8 +1389,8 @@ void AppBase::CreateGraphicsPipeline(Shader::ShaderModuleInfo vertModule, Shader
         throw std::runtime_error("failed to create graphics pipeline!");
     }
 
-    vkDestroyShaderModule(_vulkanDevice->_device, vertModule.handle, nullptr);
-    vkDestroyShaderModule(_vulkanDevice->_device, fragModule.handle, nullptr);
+    vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.vert.handle, nullptr);
+    vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.frag.handle, nullptr);
 }
 
 void AppBase::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
@@ -1591,7 +1584,7 @@ void AppBase::Initialize() {
     _shader = new Shader();
     _shader->Connect(_vulkanDevice);
     _shaderModules = _shader->LoadShaderPrograms("shaders/mesh.vert.spv", "shaders/mesh.frag.spv");
-    CreateGraphicsPipeline(_shaderModules[0], _shaderModules[1]);
+    CreateGraphicsPipeline();
 
     CreateDepthResources();
     CreateFramebuffers();
@@ -1599,8 +1592,8 @@ void AppBase::Initialize() {
     CreateSyncObjects();
 
     _gui = new Gui();
-    _gui->Connect(_vulkanDevice);
-    _gui->PrepareImGui(_instance, _vulkanDevice->_commandPool);
+    _gui->Connect(_vulkanDevice, _vulkanDevice->_queue);
+    _gui->PrepareUI(_instance, _vulkanDevice->_commandPool);
 
     _camera = new Camera();
     _camera->type = Camera::CameraType::lookat;
@@ -1632,7 +1625,7 @@ void AppBase::RecreateSwapChain() {
     _swapchain->CreateSwapChain();
 
     CreateRenderPass();
-    CreateGraphicsPipeline(_shaderModules[0], _shaderModules[1]);
+    CreateGraphicsPipeline();
     CreateDepthResources();
     CreateFramebuffers();
     glTF::GetglTF()->Recreate();
@@ -1699,9 +1692,16 @@ void AppBase::drawFrame() {
 void AppBase::Run() {
     while (!glfwWindowShouldClose(_window)) {
 
+        auto tStart = std::chrono::high_resolution_clock::now();
+
         glfwPollEvents();
         drawFrame();
-        _gui->UpdateOverLay();
+
+        auto tEnd = std::chrono::high_resolution_clock::now();
+        auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
+        frameTimer = (float)tDiff / 1000.0f;
+
+        _gui->UpdateUI(frameTimer, _mouseButtons, _mousePos);
         glTF::GetglTF()->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
     }
     vkDeviceWaitIdle(_vulkanDevice->_device);
