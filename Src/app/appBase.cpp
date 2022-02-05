@@ -1331,7 +1331,7 @@ void AppBase::CreateGraphicsPipeline() {
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = VK_TRUE;
     depthStencil.depthWriteEnable = VK_TRUE;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
@@ -1455,7 +1455,13 @@ void AppBase::CreateDepthResources() {
 
     VkFormat depthFormat = _vulkanDevice->FindDepthFormat();
     CreateImage(_swapchain->_extent.width, _swapchain->_extent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _depthImage, _depthImageMemory);
-    _depthImageView = CreateImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+    if (depthFormat > VK_FORMAT_D16_UNORM_S8_UINT) {
+        _depthImageView = CreateImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_STENCIL_BIT, 1);
+    }
+    else {
+        _depthImageView = CreateImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+    }
+
 }
 
 void AppBase::CreateFramebuffers() {

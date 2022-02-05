@@ -317,6 +317,7 @@ void Gui::CreateGraphicsPipeline(VkRenderPass& renderPass) {
     depthStencil.depthTestEnable = VK_FALSE;
     depthStencil.depthWriteEnable = VK_FALSE;
     depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+    depthStencil.back.compareOp = VK_COMPARE_OP_ALWAYS;
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
