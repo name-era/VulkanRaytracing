@@ -128,6 +128,11 @@ public:
     void CreateCommandBuffers();
 
     /**
+    * @brief    コマンドバッファを更新する
+    */
+    void BuildCommandBuffers();
+
+    /**
     * @brief    同期オブジェクトを作成する
     */
     void CreateSyncObjects();

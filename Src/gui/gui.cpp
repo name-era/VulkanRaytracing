@@ -9,7 +9,7 @@ void Gui::CreateImage(uint32_t width, uint32_t height, VkImage& image, VkDeviceM
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
-    imageInfo.format = SRGBCOLORFORMAT;
+    imageInfo.format = FONTFORMAT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -116,7 +116,7 @@ void Gui::PrepareImage() {
 
     unsigned char* fontData;
     int texWidth, texHeight;
-    const std::string filename = ".Assets/Roboto-Medium.ttf";
+    const std::string filename = "Assets/Roboto-Medium.ttf";
     io.Fonts->AddFontFromFileTTF(filename.c_str(), 16.0f);
     io.Fonts->GetTexDataAsRGBA32(&fontData, &texWidth, &texHeight);
     VkDeviceSize uploadSize = texWidth * texHeight * 4 * sizeof(char);
@@ -145,7 +145,7 @@ void Gui::CreateImageView() {
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = _fontImage.image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = SRGBCOLORFORMAT;
+    viewInfo.format = FONTFORMAT;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
@@ -165,18 +165,18 @@ void Gui::CreateSampler() {
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
     samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy = 1;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
     samplerInfo.compareEnable = VK_FALSE;
     samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 1.0f;
+    samplerInfo.maxLod = 0.0f;
     samplerInfo.mipLodBias = 0.0f;
 
     if (vkCreateSampler(_vulkanDevice->_device, &samplerInfo, nullptr, &_fontImage.sampler) != VK_SUCCESS) {
@@ -244,7 +244,7 @@ void Gui::CreateDescriptorSet() {
     vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWriteMaterial, 0, nullptr);
 }
 
-void Gui::CreateGraphicsPipeline() {
+void Gui::CreateGraphicsPipeline(VkRenderPass& renderPass) {
 
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
@@ -288,7 +288,6 @@ void Gui::CreateGraphicsPipeline() {
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -333,16 +332,16 @@ void Gui::CreateGraphicsPipeline() {
         VK_DYNAMIC_STATE_SCISSOR
     };
 
-    VkPipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo = {};
-    pipelineDynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    pipelineDynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t> (dynamicStateEnables.size());
-    pipelineDynamicStateCreateInfo.pDynamicStates = dynamicStateEnables.data();
+    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
+    dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t> (dynamicStateEnables.size());
+    dynamicStateCreateInfo.pDynamicStates = dynamicStateEnables.data();
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    auto bindingDescription = UIVert::getBindingDescription();
-    auto attributeDescriptions = UIVert::getAttributeDescriptions();
+    auto bindingDescription = GetBindingDescription();
+    auto attributeDescriptions = GetAttributeDescriptions();
 
     vertexInputInfo.vertexBindingDescriptionCount = 1;
     vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
@@ -351,12 +350,15 @@ void Gui::CreateGraphicsPipeline() {
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.layout = _pipelineLayout;
+    pipelineInfo.renderPass = renderPass;
     pipelineInfo.pInputAssemblyState = &inputAssembly;
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.pViewportState = &viewportState;
     pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDynamicState = &dynamicStateCreateInfo;
     pipelineInfo.stageCount = 2;
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.subpass = 0;
@@ -370,7 +372,7 @@ void Gui::CreateGraphicsPipeline() {
     vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.frag.handle, nullptr);
 }
 
-void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool) {
+void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool, VkRenderPass& renderPass) {
 
     ImGui::CreateContext();
     //color
@@ -394,53 +396,109 @@ void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool) {
     ImGuiIO& io = ImGui::GetIO();
     io.FontGlobalScale = 1.0f;
 
-    _shaderModules = _shader->LoadShaderPrograms("shaders/mesh.vert.spv", "shaders/mesh.frag.spv");
+    _shader = new Shader();
+    _shader->Connect(_vulkanDevice);
+    _shaderModules = _shader->LoadShaderPrograms("Shaders/ui.vert.spv", "Shaders/ui.frag.spv");
     
     PrepareImage();
     CreateImageView();
     CreateSampler();
 
     CreateDescriptorSet();
-    CreateGraphicsPipeline();
+    CreateGraphicsPipeline(renderPass);
 }
 
-void Gui::UpdateUI(float frameTimer, Initializers::MouseButtons mouseButtons, glm::vec2 mousePos) {
-
-    ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2((float)WIDTH, (float)HEIGHT);
-    io.DeltaTime = frameTimer;
-
-    io.MousePos = ImVec2(mousePos.x, mousePos.y);
-    io.MouseDown[0] = mouseButtons.left;
-    io.MouseDown[1] = mouseButtons.right;
-
-
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    ImGui::Begin("Info");
-    ImGui::Text("Framerate(avg) %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-    
-    if (ImGui::Button("Button"))
-    {
-
-    }
-
-    ImGui::SliderFloat("Rotate", &_vulkanDevice->_angle, 0.0f, 360.0f);
-    ImGui::SliderFloat("PosX", &_vulkanDevice->_cmeraPosX, 2.0f, 10.0f);
-    ImGui::SliderFloat("PosY", &_vulkanDevice->_cameraPosY, 2.0f, 10.0f);
-    ImGui::SliderFloat("PosZ", &_vulkanDevice->_cameraPsZ, 2.0f, 10.0f);
-
-    ImGui::ColorPicker4("Color", _vulkanDevice->_color);
-    ImGui::End();
-    ImGui::Render();
-
-}
-
-void Gui::Draw(VkCommandBuffer commandBuffer) {
+bool Gui::UpdateBuffers() {
 
     ImDrawData* imDrawData = ImGui::GetDrawData();
+    bool IsUpdateCmdBuffers = false;
+
+    if (!imDrawData) { return false; };
+
+    VkDeviceSize vertexBufferSize = imDrawData->TotalVtxCount * sizeof(ImDrawVert);
+    VkDeviceSize indexBufferSize = imDrawData->TotalIdxCount * sizeof(ImDrawIdx);
+
+    if ((vertexBufferSize == 0) || (indexBufferSize == 0)) {
+        return false;
+    }
+
+    //Vertex buffer
+    if ((_vertexBuffer.buffer == VK_NULL_HANDLE) || (_vertexBuffer.count != imDrawData->TotalVtxCount)) {
+        
+        if (_vertexBuffer.data) {
+            vkUnmapMemory(_vulkanDevice->_device, _vertexBuffer.memory);
+        }
+        if (_vertexBuffer.buffer) {
+            vkDestroyBuffer(_vulkanDevice->_device, _vertexBuffer.buffer, nullptr);
+        }
+        if (_vertexBuffer.memory) {
+            vkFreeMemory(_vulkanDevice->_device, _vertexBuffer.memory, nullptr);
+        }
+
+        _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, _vertexBuffer.buffer, _vertexBuffer.memory);
+        _vertexBuffer.count = imDrawData->TotalVtxCount;
+        
+        vkMapMemory(_vulkanDevice->_device, _vertexBuffer.memory, 0, vertexBufferSize, 0, &_vertexBuffer.data);
+        IsUpdateCmdBuffers = true;
+    }
+
+    // Index buffer
+    if ((_indexBuffer.buffer == VK_NULL_HANDLE) || (_indexBuffer.count < imDrawData->TotalIdxCount)) {
+        
+        if (_indexBuffer.data) {
+            vkUnmapMemory(_vulkanDevice->_device, _indexBuffer.memory);
+        }
+        if (_indexBuffer.buffer) {
+            vkDestroyBuffer(_vulkanDevice->_device, _indexBuffer.buffer, nullptr);
+        }
+        if (_indexBuffer.memory) {
+            vkFreeMemory(_vulkanDevice->_device, _indexBuffer.memory, nullptr);
+        }
+
+        _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, _indexBuffer.buffer, _indexBuffer.memory);
+        _indexBuffer.count= imDrawData->TotalIdxCount;
+
+        vkMapMemory(_vulkanDevice->_device, _indexBuffer.memory, 0, indexBufferSize, 0, &_indexBuffer.data);
+        IsUpdateCmdBuffers = true;
+    }
+
+    // Upload data
+    ImDrawVert* vtxDst = (ImDrawVert*)_vertexBuffer.data;
+    ImDrawIdx* idxDst = (ImDrawIdx*)_indexBuffer.data;
+
+    for (int n = 0; n < imDrawData->CmdListsCount; n++) {
+        const ImDrawList* cmd_list = imDrawData->CmdLists[n];
+        memcpy(vtxDst, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+        memcpy(idxDst, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+        vtxDst += cmd_list->VtxBuffer.Size;
+        idxDst += cmd_list->IdxBuffer.Size;
+    }
+
+    return IsUpdateCmdBuffers;
+}
+
+void Gui::DrawUI(VkCommandBuffer commandBuffer) {
+
+    VkViewport viewport{};
+    viewport.width = WIDTH;
+    viewport.height = HEIGHT;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor{};
+    scissor.extent.width = WIDTH;
+    scissor.extent.height = HEIGHT;
+    scissor.offset = { 0,0 };
+
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+
+    ImDrawData* imDrawData = ImGui::GetDrawData();
+    if ((!imDrawData) || (imDrawData->CmdListsCount == 0)) {
+        return;
+    }
+
     int32_t vertexOffset = 0;
     int32_t indexOffset = 0;
     ImGuiIO& io = ImGui::GetIO();
@@ -475,6 +533,37 @@ void Gui::Draw(VkCommandBuffer commandBuffer) {
     }
 }
 
+void Gui::UpdateUI(float frameTimer, Initializers::MouseButtons mouseButtons, glm::vec2 mousePos) {
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.DisplaySize = ImVec2((float)WIDTH, (float)HEIGHT);
+    io.DeltaTime = frameTimer;
+
+    io.MousePos = ImVec2(mousePos.x, mousePos.y);
+    io.MouseDown[0] = mouseButtons.left;
+    io.MouseDown[1] = mouseButtons.right;
+
+
+    ImGui::NewFrame();
+    ImVec4 clear_color = ImColor(114, 144, 154);
+    static float f = 0.0f;
+    ImGui::TextUnformatted("test");
+    ImGui::Text("Camera");
+    ImGui::InputFloat3("position", &mousePos.x);
+    ImGui::InputFloat3("rotation", &mousePos.y);
+
+    ImGui::SetNextWindowSize(ImVec2(200, 200), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Example settings");
+    ImGui::Checkbox("Render models", &_check);
+    ImGui::End();
+
+    ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiCond_FirstUseEver);
+    ImGui::ShowDemoWindow();
+
+    ImGui::Render();
+}
+
+
 void Gui::Cleanup() {
 
 }
@@ -491,9 +580,6 @@ void Gui::Destroy() {
     vkDestroyBuffer(_vulkanDevice->_device, _indexBuffer.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, _indexBuffer.memory, nullptr);
 
-    vkDestroyBuffer(_vulkanDevice->_device, _vertexBuffer.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, _vertexBuffer.memory, nullptr);
-
     vkDestroySampler(_vulkanDevice->_device, _fontImage.sampler, nullptr);
     vkDestroyImageView(_vulkanDevice->_device, _fontImage.view, nullptr);
     vkDestroyImage(_vulkanDevice->_device, _fontImage.image, nullptr);
@@ -502,8 +588,10 @@ void Gui::Destroy() {
     vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout, nullptr);
     vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
     
-    ImGui_ImplVulkan_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
+    vkDestroyPipelineLayout(_vulkanDevice->_device, _pipelineLayout, nullptr);
+    vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
+
+
     ImGui::DestroyContext();
 }
 

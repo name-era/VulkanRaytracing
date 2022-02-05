@@ -1,6 +1,7 @@
 #pragma once
 
 #define IMAGEFORMAT VK_FORMAT_R8G8B8A8_SRGB
+#define FONTFORMAT VK_FORMAT_R8G8B8A8_UNORM
 #define SRGBCOLORFORMAT VK_FORMAT_B8G8R8A8_SRGB
 
 const uint32_t WIDTH = 1280;
@@ -19,6 +20,8 @@ namespace Initializers {
 	struct Buffer {
 		VkBuffer buffer;
 		VkDeviceMemory memory;
+		int count;
+		void* data;
 	};
 	
 	struct Image {

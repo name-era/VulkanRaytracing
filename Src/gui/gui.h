@@ -6,8 +6,6 @@
 
 #include <vulkan/vulkan.h>
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_vulkan.h>
 #include <glfw3.h>
 #include <glm/glm.hpp>
 
@@ -23,43 +21,38 @@ public:
         glm::vec2 translate;
     } _pushConstBlock;
 
-    struct UIVert
-    {
-        ImVec2  pos;
-        ImVec2  uv;
-        ImU32   color;
+    
+    //vertex info
+    static VkVertexInputBindingDescription GetBindingDescription() {
+        VkVertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = 0;
+        bindingDescription.stride = sizeof(ImDrawVert);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-        static VkVertexInputBindingDescription getBindingDescription() {
-            VkVertexInputBindingDescription bindingDescription{};
-            bindingDescription.binding = 0;
-            bindingDescription.stride = sizeof(ImDrawVert);
-            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        return bindingDescription;
+    }
 
-            return bindingDescription;
-        }
+    static std::array<VkVertexInputAttributeDescription, 3> GetAttributeDescriptions() {
 
-        static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
 
-            std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
+        attributeDescriptions[0].binding = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(ImDrawVert, pos);
 
-            attributeDescriptions[0].binding = 0;
-            attributeDescriptions[0].location = 0;
-            attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[0].offset = offsetof(UIVert, pos);
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(ImDrawVert, uv);
 
-            attributeDescriptions[1].binding = 0;
-            attributeDescriptions[1].location = 1;
-            attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[1].offset = offsetof(UIVert, uv);
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = VK_FORMAT_R8G8B8A8_UNORM;
+        attributeDescriptions[2].offset = offsetof(ImDrawVert, col);
 
-            attributeDescriptions[2].binding = 0;
-            attributeDescriptions[2].location = 2;
-            attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[2].offset = offsetof(UIVert, color);
-
-            return attributeDescriptions;
-        }
-    };
+        return attributeDescriptions;
+    }
 
 
     /**
@@ -100,12 +93,17 @@ public:
     /**
     * @brief    パイプラインの作成
     */
-    void CreateGraphicsPipeline();
+    void CreateGraphicsPipeline(VkRenderPass& renderPass);
 
     /**
     * @brief    UIの準備
     */
-    void PrepareUI(VkInstance& instance, VkCommandPool& commandBuffers);
+    void PrepareUI(VkInstance& instance, VkCommandPool& commandBuffers, VkRenderPass& renderPass);
+
+    /**
+    * @brief    各バッファの更新
+    */
+    bool UpdateBuffers();
 
     /**
     * @brief    UIの更新
@@ -115,7 +113,7 @@ public:
     /**
     * @brief    描画
     */
-    void Draw(VkCommandBuffer commandBuffer);
+    void DrawUI(VkCommandBuffer commandBuffer);
 
     void Cleanup();
     void Recreate();
@@ -149,5 +147,5 @@ private:
 
     const uint32_t _width = 200;
     const uint32_t _height = 200;
-
+    bool _check = 0;
 };

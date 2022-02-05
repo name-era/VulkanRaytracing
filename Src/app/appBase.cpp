@@ -1219,7 +1219,7 @@ void AppBase::CreateRenderPass() {
     depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1485,6 +1485,20 @@ void AppBase::CreateFramebuffers() {
 }
 
 void AppBase::CreateCommandBuffers() {
+    _commandBuffers.resize(_swapchain->_imageCount);
+
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = _vulkanDevice->_commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = (uint32_t)_commandBuffers.size();
+
+    if (vkAllocateCommandBuffers(_vulkanDevice->_device, &allocInfo, _commandBuffers.data()) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate command buffers!");
+    }
+}
+
+void AppBase::BuildCommandBuffers() {
 
     _commandBuffers.resize(_swapchain->_imageCount);
 
@@ -1515,7 +1529,7 @@ void AppBase::CreateCommandBuffers() {
         renderPassInfo.renderArea.extent = _swapchain->_extent;
 
         std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.3f, 0.f, 0.f, 1.0f} };
+        clearValues[0].color = { {0.0f, 0.f, 0.f, 1.0f} };
         clearValues[1].depthStencil = { 1.0f, 0 };
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -1529,7 +1543,7 @@ void AppBase::CreateCommandBuffers() {
 
         glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
 
-        _gui->Draw(_commandBuffers[i]);
+        _gui->DrawUI(_commandBuffers[i]);
         
         vkCmdEndRenderPass(_commandBuffers[i]);
 
@@ -1578,22 +1592,25 @@ void AppBase::Initialize() {
     //load gltf model
     _vulkanDevice->CreateCommandPool();
     glTF::GetglTF()->Connect(_vulkanDevice);
-    glTF::GetglTF()->LoadFromFile(".Assets/flightHelmet/FlightHelmet.gltf");
+    glTF::GetglTF()->LoadFromFile("Assets/flightHelmet/FlightHelmet.gltf");
     glTF::GetglTF()->CreateDescriptors();
 
     _shader = new Shader();
     _shader->Connect(_vulkanDevice);
-    _shaderModules = _shader->LoadShaderPrograms("shaders/mesh.vert.spv", "shaders/mesh.frag.spv");
+    _shaderModules = _shader->LoadShaderPrograms("Shaders/mesh.vert.spv", "Shaders/mesh.frag.spv");
     CreateGraphicsPipeline();
+
+    _gui = new Gui();
+    _gui->Connect(_vulkanDevice, _vulkanDevice->_queue);
+    _gui->PrepareUI(_instance, _vulkanDevice->_commandPool, _renderPass);
 
     CreateDepthResources();
     CreateFramebuffers();
     CreateCommandBuffers();
+    BuildCommandBuffers();
     CreateSyncObjects();
 
-    _gui = new Gui();
-    _gui->Connect(_vulkanDevice, _vulkanDevice->_queue);
-    _gui->PrepareUI(_instance, _vulkanDevice->_commandPool);
+
 
     _camera = new Camera();
     _camera->type = Camera::CameraType::lookat;
@@ -1630,6 +1647,7 @@ void AppBase::RecreateSwapChain() {
     CreateFramebuffers();
     glTF::GetglTF()->Recreate();
     CreateCommandBuffers();
+    BuildCommandBuffers();
 
     _camera->UpdateAspectRatio((float)width / (float)height);
     _gui->Recreate();
@@ -1696,13 +1714,16 @@ void AppBase::Run() {
 
         glfwPollEvents();
         drawFrame();
-
+        glTF::GetglTF()->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
+        
         auto tEnd = std::chrono::high_resolution_clock::now();
         auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
         frameTimer = (float)tDiff / 1000.0f;
 
         _gui->UpdateUI(frameTimer, _mouseButtons, _mousePos);
-        glTF::GetglTF()->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
+        if (_gui->UpdateBuffers()) {
+            BuildCommandBuffers();
+        }
     }
     vkDeviceWaitIdle(_vulkanDevice->_device);
 }
