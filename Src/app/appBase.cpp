@@ -1675,6 +1675,153 @@ void AppBase::Initialize() {
 }
 
 /*******************************************************************************************************************
+*                                             レイトレーシング
+********************************************************************************************************************/
+
+uint64_t AppBase::GetBufferDeviceAddress(VkBuffer buffer) {
+    VkBufferDeviceAddressInfo bufferDeviceInfo{};
+    bufferDeviceInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    bufferDeviceInfo.buffer = buffer;
+    return vkGetBufferDeviceAddress(_vulkanDevice->_device, &bufferDeviceInfo);
+}
+
+void AppBase::CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo) {
+    VkBufferCreateInfo bufferCreateInfo{};
+    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCreateInfo.size = buildSizeInfo.accelerationStructureSize;
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    vkCreateBuffer(_vulkanDevice->_device, &bufferCreateInfo, nullptr, &accelerationStructure.buffer);
+
+    VkMemoryRequirements memoryRequirements{};
+    vkGetBufferMemoryRequirements(_vulkanDevice->_device, accelerationStructure.buffer, &memoryRequirements);
+    VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo{};
+    memoryAllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    memoryAllocateFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+    VkMemoryAllocateInfo memoryAllocateInfo{};
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
+    memoryAllocateInfo.allocationSize = memoryRequirements.size;
+
+    vkAllocateMemory(_vulkanDevice->_device, &memoryAllocateInfo, nullptr, &accelerationStructure.memory);
+    vkBindBufferMemory(_vulkanDevice->_device, accelerationStructure.buffer, accelerationStructure.memory, 0);
+}
+
+void AppBase::CreateBLAS() {
+    struct Vertex
+    {
+        float pos[3];
+    };
+
+    std::vector<Vertex> tri = {
+        {1.0f, 1.0f, 0.0f},
+        {-1.0f, 1.0f, 0.0f},
+        {0.0f, -1.0f, 0.0f}
+    };
+
+    VkTransformMatrixKHR transformMatrix = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f
+    };
+
+    std::vector<uint32_t> indices = { 0,1,2 };
+
+    _vulkanDevice->CreateBuffer(
+        tri.size() * sizeof(Vertex),
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        _vertexBufferBLAS.buffer,
+        _vertexBufferBLAS.memory
+    );
+
+    void* data;
+    vkMapMemory(_vulkanDevice->_device, _vertexBufferBLAS.memory, 0, tri.size() * sizeof(Vertex), 0, &data);
+    memcpy(data, _vertexBufferBLAS.buffer, tri.size() * sizeof(Vertex));
+    vkUnmapMemory(_vulkanDevice->_device, _vertexBufferBLAS.memory);
+
+    _vulkanDevice->CreateBuffer(
+        indices.size() * sizeof(uint32_t),
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        _indexBufferBLAS.buffer,
+        _indexBufferBLAS.memory
+    );
+
+    void* data;
+    vkMapMemory(_vulkanDevice->_device, _indexBufferBLAS.memory, 0, indices.size() * sizeof(uint32_t), 0, &data);
+    memcpy(data, _indexBufferBLAS.buffer, indices.size() * sizeof(uint32_t));
+    vkUnmapMemory(_vulkanDevice->_device, _indexBufferBLAS.memory);
+
+    _vulkanDevice->CreateBuffer(
+        sizeof(VkTransformMatrixKHR),
+        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        _transformBufferBLAS.buffer,
+        _transformBufferBLAS.memory
+    );
+
+    void* data;
+    vkMapMemory(_vulkanDevice->_device, _transformBufferBLAS.memory, 0, sizeof(VkTransformMatrixKHR), 0, &data);
+    memcpy(data, _transformBufferBLAS.buffer, sizeof(VkTransformMatrixKHR));
+    vkUnmapMemory(_vulkanDevice->_device, _transformBufferBLAS.memory);
+
+    VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
+    VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
+    VkDeviceOrHostAddressConstKHR transformBufferDeviceAddress{};
+
+    //BLASを作成する
+    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_vertexBufferBLAS.buffer);
+    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_indexBufferBLAS.buffer);
+    transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_transformBufferBLAS.buffer);
+
+    VkAccelerationStructureGeometryKHR accelerationGeometryInfo{};
+    accelerationGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    accelerationGeometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    accelerationGeometryInfo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    accelerationGeometryInfo.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+    accelerationGeometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+    accelerationGeometryInfo.geometry.triangles.vertexData = vertexBufferDeviceAddress;
+    accelerationGeometryInfo.geometry.triangles.maxVertex = tri.size();
+    accelerationGeometryInfo.geometry.triangles.vertexStride = sizeof(Vertex);
+    accelerationGeometryInfo.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+    accelerationGeometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
+    accelerationGeometryInfo.geometry.triangles.transformData.deviceAddress = 0;
+    accelerationGeometryInfo.geometry.triangles.transformData.hostAddress = nullptr;
+    accelerationGeometryInfo.geometry.triangles.transformData = transformBufferDeviceAddress;
+
+    //サイズ情報を取得する
+    VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo{};
+    accelerationStructureBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    accelerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    accelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    accelerationStructureBuildGeometryInfo.geometryCount = 1;
+    accelerationStructureBuildGeometryInfo.pGeometries = &accelerationGeometryInfo;
+
+    const uint32_t numTriangles = 1;
+    VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo;
+    accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    vkGetAccelerationStructureBuildSizesKHR(
+        _vulkanDevice->_device,
+        VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+        &accelerationStructureBuildGeometryInfo,
+        &numTriangles,
+        &accelerationStructureBuildSizesInfo
+    );
+
+    CreateAccelerationStructureBuffer(_bottomLevelAS, accelerationStructureBuildSizesInfo);
+
+    //BLAS生成
+    VkAccelerationStructureCreateInfoKHR accelerationStructureCI{};
+    accelerationStructureCI.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    accelerationStructureCI.buffer = _bottomLevelAS.buffer;
+    accelerationStructureCI.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
+    accelerationStructureCI.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &accelerationStructureCI, nullptr, &_bottomLevelAS.handle);
+
+    
+}
+
+/*******************************************************************************************************************
 *                                             描画
 ********************************************************************************************************************/
 

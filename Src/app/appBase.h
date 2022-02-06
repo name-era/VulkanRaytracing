@@ -32,6 +32,14 @@ class AppBase
 
 public:
 
+    //Ray tracing acceleration structure
+    struct AccelerationStructure{
+        VkAccelerationStructureKHR handle;
+        uint64_t deviceAddress = 0;
+        VkDeviceMemory memory;
+        VkBuffer buffer;
+    };
+
     /**
     * @brief    コンストラクタ
     */
@@ -147,6 +155,25 @@ public:
     */
     void Initialize();
 
+
+    /*******************************************************************************************************************
+    *                                             レイトレーシング
+    ********************************************************************************************************************/
+    /**
+    * @brief    デバイスアドレスの取得
+    */
+    uint64_t GetBufferDeviceAddress(VkBuffer buffer);
+
+    /**
+    * @brief    AccelerationStructureバッファの作成
+    */
+    void CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
+    
+    /**
+    * @brief    BLASを作成する
+    */
+    void CreateBLAS();
+
     /*******************************************************************************************************************
     *                                             ループ内
     ********************************************************************************************************************/
@@ -245,4 +272,9 @@ public:
     
     //UI用
     VkDescriptorPool _descriptorPool;
+
+    //BLASテスト
+    Initializers::Buffer _vertexBufferBLAS;
+    Initializers::Buffer _indexBufferBLAS;
+    Initializers::Buffer _transformBufferBLAS;
 };
