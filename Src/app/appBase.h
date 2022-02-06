@@ -40,6 +40,14 @@ public:
         VkBuffer buffer;
     };
 
+    //Holds data for a ray tracing scratch buffer that is used as a temporary storage
+    struct RayTracingScratchBuffer
+    {
+        uint64_t deviceAddress = 0;
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+    };
+
     /**
     * @brief    コンストラクタ
     */
@@ -170,6 +178,11 @@ public:
     void CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
     
     /**
+    * @brief    スクラッチバッファの作成
+    */
+    RayTracingScratchBuffer CreateScrachBuffer(VkDeviceSize size);
+
+    /**
     * @brief    BLASを作成する
     */
     void CreateBLAS();
@@ -273,8 +286,10 @@ public:
     //UI用
     VkDescriptorPool _descriptorPool;
 
-    //BLASテスト
+    //レイトレーシング
     Initializers::Buffer _vertexBufferBLAS;
     Initializers::Buffer _indexBufferBLAS;
     Initializers::Buffer _transformBufferBLAS;
+
+    AccelerationStructure _bottomLevelAS;
 };

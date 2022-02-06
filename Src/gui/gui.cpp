@@ -36,7 +36,7 @@ void Gui::CreateImage(uint32_t width, uint32_t height, VkImage& image, VkDeviceM
 }
 
 void Gui::TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
-    VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
 
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -80,11 +80,11 @@ void Gui::TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageL
         1, &barrier
     );
 
-    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _queue);
+    _vulkanDevice->EndCommand(commandBuffer, _queue);
 }
 
 void Gui::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-    VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
 
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
@@ -103,7 +103,7 @@ void Gui::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 
-    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _queue);
+    _vulkanDevice->EndCommand(commandBuffer, _queue);
 }
 
 void Gui::PrepareImage() {

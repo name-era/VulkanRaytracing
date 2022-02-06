@@ -74,12 +74,17 @@ struct VulkanDevice {
     /**
     * @brief    コマンドバッファの記録開始
     */
-    VkCommandBuffer BeginSingleTimeCommands();
+    VkCommandBuffer BeginCommand();
 
     /**
     * @brief    コマンドバッファの記録終了
     */
-    void EndSingleTimeCommands(VkCommandBuffer& commandBuffer, VkQueue& queue);
+    void EndCommand(VkCommandBuffer& commandBuffer, VkQueue& queue);
+
+    /**
+    * @brief    コマンドバッファの記録終了＆待機（フレームと関連付かないコマンドバッファ）
+    */
+    void EndCommandAndWait(VkCommandBuffer& commandBuffer, VkQueue& queue);
 
     /**
     * @brief    サポートしているフォーマットを見つける

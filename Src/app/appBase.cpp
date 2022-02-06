@@ -314,7 +314,7 @@ void glTF::Texture::CreateImage(uint32_t width, uint32_t height, uint32_t mipLev
 }
 
 void glTF::Texture::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
-    VkCommandBuffer commandBuffer = vulkanDevice->BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = vulkanDevice->BeginCommand();
 
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -359,11 +359,11 @@ void glTF::Texture::TransitionImageLayout(VkImage image, VkFormat format, VkImag
         1, &barrier
     );
 
-    vulkanDevice->EndSingleTimeCommands(commandBuffer, queue);
+    vulkanDevice->EndCommand(commandBuffer, queue);
 }
 
 void glTF::Texture::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-    VkCommandBuffer commandBuffer = vulkanDevice->BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = vulkanDevice->BeginCommand();
 
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
@@ -383,7 +383,7 @@ void glTF::Texture::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t w
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 
-    vulkanDevice->EndSingleTimeCommands(commandBuffer, queue);
+    vulkanDevice->EndCommand(commandBuffer, queue);
 }
 
 void glTF::Texture::PrepareImage(void* buffer, VkDeviceSize bufferSize, VkFormat format, uint32_t texWidth, uint32_t texHeight) {
@@ -1433,9 +1433,9 @@ void AppBase::PrepareGUI() {
     ImGui_ImplVulkan_Init(&initInfo, _renderPass);
 
     //upload GUI font texture
-    VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
     ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
-    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_queue);
+    _vulkanDevice->EndCommand(commandBuffer, _vulkanDevice->_queue);
     ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 
@@ -1694,9 +1694,11 @@ void AppBase::CreateAccelerationStructureBuffer(AccelerationStructure& accelerat
 
     VkMemoryRequirements memoryRequirements{};
     vkGetBufferMemoryRequirements(_vulkanDevice->_device, accelerationStructure.buffer, &memoryRequirements);
+
     VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo{};
     memoryAllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
     memoryAllocateFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+
     VkMemoryAllocateInfo memoryAllocateInfo{};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
@@ -1704,6 +1706,39 @@ void AppBase::CreateAccelerationStructureBuffer(AccelerationStructure& accelerat
 
     vkAllocateMemory(_vulkanDevice->_device, &memoryAllocateInfo, nullptr, &accelerationStructure.memory);
     vkBindBufferMemory(_vulkanDevice->_device, accelerationStructure.buffer, accelerationStructure.memory, 0);
+}
+
+AppBase::RayTracingScratchBuffer AppBase::CreateScrachBuffer(VkDeviceSize size) {
+    
+    RayTracingScratchBuffer scratchBuffer{};
+
+    VkBufferCreateInfo bufferCI{};
+    bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCI.size = size;
+    bufferCI.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    vkCreateBuffer(_vulkanDevice->_device, &bufferCI, nullptr, &scratchBuffer.buffer);
+
+    VkMemoryRequirements memoryRequirements{};
+    vkGetBufferMemoryRequirements(_vulkanDevice->_device, scratchBuffer.buffer, &memoryRequirements);
+
+    VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo{};
+    memoryAllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+    memoryAllocateFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+
+    VkMemoryAllocateInfo memoryAllocateInfo{};
+    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
+    memoryAllocateInfo.allocationSize = memoryRequirements.size;
+
+    vkAllocateMemory(_vulkanDevice->_device, &memoryAllocateInfo, nullptr, &scratchBuffer.memory);
+    vkBindBufferMemory(_vulkanDevice->_device, scratchBuffer.buffer, scratchBuffer.memory, 0);
+
+    VkBufferDeviceAddressInfoKHR bufferDeviceAddressInfo{};
+    bufferDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+    bufferDeviceAddressInfo.buffer = scratchBuffer.buffer;
+
+    scratchBuffer.deviceAddress = GetBufferDeviceAddress(scratchBuffer.buffer);
+    return scratchBuffer;
 }
 
 void AppBase::CreateBLAS() {
@@ -1818,7 +1853,50 @@ void AppBase::CreateBLAS() {
     accelerationStructureCI.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
     vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &accelerationStructureCI, nullptr, &_bottomLevelAS.handle);
 
-    
+    //BLASの構築に必要なスクラッチ（作業）バッファの作成
+    RayTracingScratchBuffer scratchBuffer = CreateScrachBuffer(accelerationStructureBuildSizesInfo.buildScratchSize);
+
+    //VkAccelerationStructureBuildGeometryInfoKHRの他のパラメータ
+    accelerationStructureBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    accelerationStructureBuildGeometryInfo.dstAccelerationStructure = _bottomLevelAS.handle;
+    accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
+
+    //コマンドバッファにBLASの構築を登録する
+    VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo{};
+    buildRangeInfo.primitiveCount = numTriangles;
+    buildRangeInfo.primitiveOffset = 0;
+    buildRangeInfo.firstVertex = 0;
+    buildRangeInfo.transformOffset = 0;
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR*> buildRangeInfos = { &buildRangeInfo };
+
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
+    vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &accelerationStructureBuildGeometryInfo, buildRangeInfos.data());
+
+    //メモリバリア
+    VkBufferMemoryBarrier memoryBarrier{};
+    memoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    memoryBarrier.size = VK_WHOLE_SIZE;
+    memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    memoryBarrier.dstAccessMask = VK_QUEUE_FAMILY_IGNORED;
+    memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+    memoryBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+        0, 0, nullptr, 1, &memoryBarrier, 0, nullptr
+    );
+
+    _vulkanDevice->EndCommandAndWait(commandBuffer, _vulkanDevice->_queue);
+
+    //Acceleration Structureのデバイスアドレスを取得
+    VkAccelerationStructureDeviceAddressInfoKHR accelerationStructureDeviceAddressInfo{};
+    accelerationStructureDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    accelerationStructureDeviceAddressInfo.accelerationStructure = _bottomLevelAS.handle;
+    _bottomLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &accelerationStructureDeviceAddressInfo);
+
+    vkDestroyBuffer(_vulkanDevice->_device, scratchBuffer.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
 /*******************************************************************************************************************

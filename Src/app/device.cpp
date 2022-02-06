@@ -204,7 +204,7 @@ void VulkanDevice::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkM
     vkBindBufferMemory(_device, buffer, bufferMemory, 0);
 }
 
-VkCommandBuffer VulkanDevice::BeginSingleTimeCommands() {
+VkCommandBuffer VulkanDevice::BeginCommand() {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -223,7 +223,7 @@ VkCommandBuffer VulkanDevice::BeginSingleTimeCommands() {
     return commandBuffer;
 }
 
-void VulkanDevice::EndSingleTimeCommands(VkCommandBuffer& commandBuffer, VkQueue& queue) {
+void VulkanDevice::EndCommand(VkCommandBuffer& commandBuffer, VkQueue& queue) {
     vkEndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo{};
@@ -237,15 +237,40 @@ void VulkanDevice::EndSingleTimeCommands(VkCommandBuffer& commandBuffer, VkQueue
     vkFreeCommandBuffers(_device, _commandPool, 1, &commandBuffer);
 }
 
+void VulkanDevice::EndCommandAndWait(VkCommandBuffer& commandBuffer, VkQueue& queue) {
+
+    vkEndCommandBuffer(commandBuffer);
+
+    VkFenceCreateInfo fenceCI{};
+    fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceCI.pNext = nullptr;
+    fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    VkFence fence;
+    vkCreateFence(_device, &fenceCI, nullptr, &fence);
+    vkResetFences(_device, 1, &fence);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+    vkQueueSubmit(_queue, 1, &submitInfo, fence);
+    
+    vkWaitForFences(_device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(_device, fence, nullptr);
+    vkQueueWaitIdle(_queue);
+
+    vkFreeCommandBuffers(_device, _commandPool, 1, &commandBuffer);
+}
+
 void VulkanDevice::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-    VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = BeginCommand();
 
     VkBufferCopy copyRegion{};
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
     //“]‘—‚ðŠ®—¹‚·‚é
-    EndSingleTimeCommands(commandBuffer, _queue);
+    EndCommand(commandBuffer, _queue);
 }
 
 VkFormat VulkanDevice::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
