@@ -1393,6 +1393,55 @@ void AppBase::CreateGraphicsPipeline() {
     vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.frag.handle, nullptr);
 }
 
+void AppBase::PrepareGUI() {
+    
+    VkDescriptorPoolSize pool_sizes[] =
+    {
+        { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+        { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+    };
+
+    VkDescriptorPoolCreateInfo pool_info = {};
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    pool_info.maxSets = 1000;
+    pool_info.poolSizeCount = static_cast<uint32_t>(std::size(pool_sizes));
+    pool_info.pPoolSizes = pool_sizes;
+
+    vkCreateDescriptorPool(_vulkanDevice->_device, &pool_info, nullptr, &_descriptorPool);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui_ImplGlfw_InitForVulkan(_window, true);
+    ImGui_ImplVulkan_InitInfo initInfo = {};
+    initInfo.Instance = _instance;
+    initInfo.PhysicalDevice = _physicalDevice;
+    initInfo.Device = _vulkanDevice->_device;
+    initInfo.QueueFamily = _vulkanDevice->FindQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT);
+    initInfo.Queue = _vulkanDevice->_queue;
+    initInfo.DescriptorPool = _descriptorPool;
+    initInfo.MinImageCount = _swapchain->_imageCount;
+    initInfo.ImageCount = _swapchain->_imageCount;
+    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+    ImGui_ImplVulkan_Init(&initInfo, _renderPass);
+
+    //upload GUI font texture
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginSingleTimeCommands();
+    ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
+    _vulkanDevice->EndSingleTimeCommands(commandBuffer, _vulkanDevice->_queue);
+    ImGui_ImplVulkan_DestroyFontUploadObjects();
+}
+
 void AppBase::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1504,7 +1553,7 @@ void AppBase::CreateCommandBuffers() {
     }
 }
 
-void AppBase::BuildCommandBuffers() {
+void AppBase::BuildCommandBuffers(bool renderImgui) {
 
     _commandBuffers.resize(_swapchain->_imageCount);
 
@@ -1549,7 +1598,10 @@ void AppBase::BuildCommandBuffers() {
 
         glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
 
-        _gui->DrawUI(_commandBuffers[i]);
+        if (renderImgui) {
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
+        }
+        //_gui->DrawUI(_commandBuffers[i]);
         
         vkCmdEndRenderPass(_commandBuffers[i]);
 
@@ -1606,14 +1658,16 @@ void AppBase::Initialize() {
     _shaderModules = _shader->LoadShaderPrograms("Shaders/mesh.vert.spv", "Shaders/mesh.frag.spv");
     CreateGraphicsPipeline();
 
-    _gui = new Gui();
-    _gui->Connect(_vulkanDevice, _vulkanDevice->_queue);
-    _gui->PrepareUI(_instance, _vulkanDevice->_commandPool, _renderPass);
+
+    PrepareGUI();
+    //_gui = new Gui();
+    //_gui->Connect(_vulkanDevice, _vulkanDevice->_queue);
+    //_gui->PrepareUI(_instance, _vulkanDevice->_commandPool, _renderPass);
 
     CreateDepthResources();
     CreateFramebuffers();
     CreateCommandBuffers();
-    BuildCommandBuffers();
+    BuildCommandBuffers(false);
     CreateSyncObjects();
 
 
@@ -1653,10 +1707,10 @@ void AppBase::RecreateSwapChain() {
     CreateFramebuffers();
     glTF::GetglTF()->Recreate();
     CreateCommandBuffers();
-    BuildCommandBuffers();
+    BuildCommandBuffers(true);
 
     _camera->UpdateAspectRatio((float)width / (float)height);
-    _gui->Recreate();
+    //_gui->Recreate();
     vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
@@ -1715,6 +1769,12 @@ void AppBase::drawFrame() {
 
 void AppBase::Run() {
     while (!glfwWindowShouldClose(_window)) {
+        
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        ImGui::ShowDemoWindow();
+        ImGui::Render();
 
         auto tStart = std::chrono::high_resolution_clock::now();
 
@@ -1726,10 +1786,12 @@ void AppBase::Run() {
         auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
         frameTimer = (float)tDiff / 1000.0f;
 
-        _gui->UpdateUI(frameTimer, _mouseButtons, _mousePos);
-        if (_gui->UpdateBuffers()) {
-            BuildCommandBuffers();
-        }
+        //_gui->UpdateUI(frameTimer, _mouseButtons, _mousePos);
+        //if (_gui->UpdateBuffers()) {
+        //    BuildCommandBuffers();
+        //}
+
+        BuildCommandBuffers(true);
     }
     vkDeviceWaitIdle(_vulkanDevice->_device);
 }
@@ -1758,7 +1820,7 @@ void AppBase::CleanupSwapchain() {
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
     
     glTF::GetglTF()->Cleanup();
-    _gui->Cleanup();
+    //_gui->Cleanup();
 }
 
 void AppBase::Destroy() {
@@ -1766,7 +1828,9 @@ void AppBase::Destroy() {
     CleanupSwapchain();
     
     glTF::GetglTF()->Destroy();
-    _gui->Destroy();
+    vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
+    ImGui_ImplVulkan_Shutdown();
+    //_gui->Destroy();
 
     vkDestroySemaphore(_vulkanDevice->_device, _renderCompleteSemaphore, nullptr);
     vkDestroySemaphore(_vulkanDevice->_device, _presentCompleteSemaphore, nullptr);
@@ -1788,6 +1852,6 @@ void AppBase::Destroy() {
     delete _swapchain;
     delete _shader;
     delete glTF::GetglTF();
-    delete _gui;
+    //delete _gui;
     delete _camera;
 }

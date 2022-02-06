@@ -22,6 +22,16 @@ namespace Initializers {
 		VkDeviceMemory memory;
 		int count;
 		void* data;
+
+		void flush(VkDevice& device, size_t uploadSize)
+		{
+			VkMappedMemoryRange mappedRange = {};
+			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+			mappedRange.memory = memory;
+			mappedRange.offset = 0;
+			mappedRange.size = uploadSize;
+			vkFlushMappedMemoryRanges(device, 1, &mappedRange);
+		}
 	};
 	
 	struct Image {

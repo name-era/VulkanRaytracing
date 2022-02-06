@@ -6,7 +6,10 @@
 
 #include <vulkan/vulkan.h>
 #include <imgui.h>
+#include <imgui_impl_vulkan.h>
+#include <imgui_impl_glfw.h>
 #include <glfw3.h>
+
 #include <glm/glm.hpp>
 
 #include "device.h"

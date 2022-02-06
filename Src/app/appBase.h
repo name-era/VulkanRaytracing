@@ -101,6 +101,11 @@ public:
     * @brief    グラフィックスパイプラインを作成する
     */
     void CreateGraphicsPipeline();
+    
+    /**
+    * @brief    exampleを使ったImGUIの表示
+    */
+    void PrepareGUI();
 
     /**
     * @brief    イメージの作成
@@ -130,7 +135,7 @@ public:
     /**
     * @brief    コマンドバッファを更新する
     */
-    void BuildCommandBuffers();
+    void BuildCommandBuffers(bool renderImgui);
 
     /**
     * @brief    同期オブジェクトを作成する
@@ -232,5 +237,7 @@ public:
     bool _framebufferResized;
 
     Shader::ShaderModules _shaderModules;
-
+    
+    //UI用
+    VkDescriptorPool _descriptorPool;
 };

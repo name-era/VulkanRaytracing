@@ -118,23 +118,25 @@ void Gui::PrepareImage() {
     io.Fonts->GetTexDataAsRGBA32(&fontData, &texWidth, &texHeight);
     VkDeviceSize uploadSize = texWidth * texHeight * 4 * sizeof(char);
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    _vulkanDevice->CreateBuffer(uploadSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+    Initializers::Buffer stagingBuffer;
+    _vulkanDevice->CreateBuffer(uploadSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer.buffer, stagingBuffer.memory);
 
     void* data;
-    vkMapMemory(_vulkanDevice->_device, stagingBufferMemory, 0, uploadSize, 0, &data);
+    vkMapMemory(_vulkanDevice->_device, stagingBuffer.memory, 0, uploadSize, 0, &data);
     memcpy(data, fontData, uploadSize);
-    vkUnmapMemory(_vulkanDevice->_device, stagingBufferMemory);
+    stagingBuffer.flush(_vulkanDevice->_device, uploadSize);
+    vkUnmapMemory(_vulkanDevice->_device, stagingBuffer.memory);
 
     CreateImage(texWidth, texHeight, _fontImage.image, _fontImage.memory);
 
     TransitionImageLayout(_fontImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    CopyBufferToImage(stagingBuffer, _fontImage.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    CopyBufferToImage(stagingBuffer.buffer, _fontImage.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
     TransitionImageLayout(_fontImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    
+    io.Fonts->SetTexID((ImTextureID)(intptr_t)_fontImage.image);
 
-    vkDestroyBuffer(_vulkanDevice->_device, stagingBuffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, stagingBufferMemory, nullptr);
+    vkDestroyBuffer(_vulkanDevice->_device, stagingBuffer.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, stagingBuffer.memory, nullptr);
 }
 
 void Gui::CreateImageView() {
@@ -160,9 +162,11 @@ void Gui::CreateSampler() {
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
     samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.maxLod = 1000;
+    samplerInfo.minLod = -1000;
     samplerInfo.maxAnisotropy = 1.0f;
     samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
@@ -357,7 +361,6 @@ void Gui::CreateGraphicsPipeline(VkRenderPass& renderPass) {
 
 void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool, VkRenderPass& renderPass) {
 
-    ImGui::CreateContext();
     //color
     ImGuiStyle& style = ImGui::GetStyle();
     style.Colors[ImGuiCol_TitleBg] = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
@@ -379,13 +382,15 @@ void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool, VkRenderPa
     ImGuiIO& io = ImGui::GetIO();
     io.FontGlobalScale = 1.0f;
 
-    _shader = new Shader();
-    _shader->Connect(_vulkanDevice);
-    _shaderModules = _shader->LoadShaderPrograms("Shaders/ui.vert.spv", "Shaders/ui.frag.spv");
-    
-    PrepareImage();
-    CreateImageView();
-    CreateSampler();
+
+
+    //_shader = new Shader();
+    //_shader->Connect(_vulkanDevice);
+    //_shaderModules = _shader->LoadShaderPrograms("Shaders/ui.vert.spv", "Shaders/ui.frag.spv");
+    //
+    //PrepareImage();
+    //CreateImageView();
+    //CreateSampler();
 
     CreateDescriptorSet();
     CreateGraphicsPipeline(renderPass);
@@ -406,18 +411,7 @@ bool Gui::UpdateBuffers() {
     }
 
     //Vertex buffer
-    if ((_vertexBuffer.buffer == VK_NULL_HANDLE) || (_vertexBuffer.count != imDrawData->TotalVtxCount)) {
-        
-        if (_vertexBuffer.data) {
-            vkUnmapMemory(_vulkanDevice->_device, _vertexBuffer.memory);
-            _vertexBuffer.data = nullptr;
-        }
-        if (_vertexBuffer.buffer) {
-            vkDestroyBuffer(_vulkanDevice->_device, _vertexBuffer.buffer, nullptr);
-        }
-        if (_vertexBuffer.memory) {
-            vkFreeMemory(_vulkanDevice->_device, _vertexBuffer.memory, nullptr);
-        }
+    if ((_vertexBuffer.buffer == VK_NULL_HANDLE) || (_vertexBuffer.count < imDrawData->TotalVtxCount)) {
 
         _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, _vertexBuffer.buffer, _vertexBuffer.memory);
         _vertexBuffer.count = imDrawData->TotalVtxCount;
@@ -428,16 +422,6 @@ bool Gui::UpdateBuffers() {
 
     // Index buffer
     if ((_indexBuffer.buffer == VK_NULL_HANDLE) || (_indexBuffer.count < imDrawData->TotalIdxCount)) {
-        
-        if (_indexBuffer.data) {
-            vkUnmapMemory(_vulkanDevice->_device, _indexBuffer.memory);
-        }
-        if (_indexBuffer.buffer) {
-            vkDestroyBuffer(_vulkanDevice->_device, _indexBuffer.buffer, nullptr);
-        }
-        if (_indexBuffer.memory) {
-            vkFreeMemory(_vulkanDevice->_device, _indexBuffer.memory, nullptr);
-        }
 
         _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, _indexBuffer.buffer, _indexBuffer.memory);
         _indexBuffer.count= imDrawData->TotalIdxCount;
@@ -458,6 +442,11 @@ bool Gui::UpdateBuffers() {
         idxDst += cmd_list->IdxBuffer.Size;
     }
 
+    _vertexBuffer.flush(_vulkanDevice->_device, VK_WHOLE_SIZE);
+    _indexBuffer.flush(_vulkanDevice->_device, VK_WHOLE_SIZE);
+
+    vkUnmapMemory(_vulkanDevice->_device, _vertexBuffer.memory);
+    vkUnmapMemory(_vulkanDevice->_device, _indexBuffer.memory);
     return IsUpdateCmdBuffers;
 }
 
