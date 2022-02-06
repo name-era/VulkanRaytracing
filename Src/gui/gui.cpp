@@ -382,15 +382,13 @@ void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool, VkRenderPa
     ImGuiIO& io = ImGui::GetIO();
     io.FontGlobalScale = 1.0f;
 
-
-
-    //_shader = new Shader();
-    //_shader->Connect(_vulkanDevice);
-    //_shaderModules = _shader->LoadShaderPrograms("Shaders/ui.vert.spv", "Shaders/ui.frag.spv");
-    //
-    //PrepareImage();
-    //CreateImageView();
-    //CreateSampler();
+    _shader = new Shader();
+    _shader->Connect(_vulkanDevice);
+    _shaderModules = _shader->LoadShaderPrograms("Shaders/ui.vert.spv", "Shaders/ui.frag.spv");
+    
+    PrepareImage();
+    CreateImageView();
+    CreateSampler();
 
     CreateDescriptorSet();
     CreateGraphicsPipeline(renderPass);

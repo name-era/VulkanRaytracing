@@ -1388,9 +1388,6 @@ void AppBase::CreateGraphicsPipeline() {
     if (vkCreateGraphicsPipelines(_vulkanDevice->_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) != VK_SUCCESS) {
         throw std::runtime_error("failed to create graphics pipeline!");
     }
-
-    vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.vert.handle, nullptr);
-    vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.frag.handle, nullptr);
 }
 
 void AppBase::PrepareGUI() {
@@ -1660,9 +1657,6 @@ void AppBase::Initialize() {
 
 
     PrepareGUI();
-    //_gui = new Gui();
-    //_gui->Connect(_vulkanDevice, _vulkanDevice->_queue);
-    //_gui->PrepareUI(_instance, _vulkanDevice->_commandPool, _renderPass);
 
     CreateDepthResources();
     CreateFramebuffers();
@@ -1710,7 +1704,6 @@ void AppBase::RecreateSwapChain() {
     BuildCommandBuffers(true);
 
     _camera->UpdateAspectRatio((float)width / (float)height);
-    //_gui->Recreate();
     vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
@@ -1767,13 +1760,102 @@ void AppBase::drawFrame() {
     vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
+void AppBase::ShowMenuFile() {
+    ImGui::MenuItem("(demo menu)", NULL, false, false);
+    if (ImGui::MenuItem("New")) {}
+    if (ImGui::MenuItem("Open", "Ctrl+O")) {}
+    if (ImGui::BeginMenu("Open Recent"))
+    {
+        ImGui::MenuItem("fish_hat.c");
+        ImGui::MenuItem("fish_hat.inl");
+        ImGui::MenuItem("fish_hat.h");
+        if (ImGui::BeginMenu("More.."))
+        {
+            ImGui::MenuItem("Hello");
+            ImGui::MenuItem("Sailor");
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::MenuItem("Save", "Ctrl+S")) {}
+    if (ImGui::MenuItem("Save As..")) {}
+
+    ImGui::Separator();
+    if (ImGui::BeginMenu("Options"))
+    {
+        static bool enabled = true;
+        ImGui::MenuItem("Enabled", "", &enabled);
+        ImGui::BeginChild("child", ImVec2(0, 60), true);
+        for (int i = 0; i < 10; i++)
+            ImGui::Text("Scrolling Text %d", i);
+        ImGui::EndChild();
+        static float f = 0.5f;
+        static int n = 0;
+        ImGui::SliderFloat("Value", &f, 0.0f, 1.0f);
+        ImGui::InputFloat("Input", &f, 0.1f);
+        ImGui::Combo("Combo", &n, "Yes\0No\0Maybe\0\0");
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Colors"))
+    {
+        float sz = ImGui::GetTextLineHeight();
+        for (int i = 0; i < ImGuiCol_COUNT; i++)
+        {
+            const char* name = ImGui::GetStyleColorName((ImGuiCol)i);
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + sz, p.y + sz), ImGui::GetColorU32((ImGuiCol)i));
+            ImGui::Dummy(ImVec2(sz, sz));
+            ImGui::SameLine();
+            ImGui::MenuItem(name);
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Options")) // <-- Append!
+    {
+        static bool b = true;
+        ImGui::Checkbox("SomeOption", &b);
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Disabled", false)) // Disabled
+    {
+        IM_ASSERT(0);
+    }
+    if (ImGui::MenuItem("Checked", NULL, true)) {}
+    if (ImGui::MenuItem("Quit", "Alt+F4")) {}
+}
+    
+void AppBase::SetImGuiWindow() {
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (ImGui::BeginMenu("File"))
+        {
+            ShowMenuFile();
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Edit"))
+        {
+            if (ImGui::MenuItem("Undo", "CTRL+Z")) {}
+            if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {}  // Disabled item
+            ImGui::Separator();
+            if (ImGui::MenuItem("Cut", "CTRL+X")) {}
+            if (ImGui::MenuItem("Copy", "CTRL+C")) {}
+            if (ImGui::MenuItem("Paste", "CTRL+V")) {}
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+
+    ImGui::ShowDemoWindow();
+}
+
 void AppBase::Run() {
     while (!glfwWindowShouldClose(_window)) {
         
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        ImGui::ShowDemoWindow();
+        SetImGuiWindow();
         ImGui::Render();
 
         auto tStart = std::chrono::high_resolution_clock::now();
@@ -1785,12 +1867,6 @@ void AppBase::Run() {
         auto tEnd = std::chrono::high_resolution_clock::now();
         auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
         frameTimer = (float)tDiff / 1000.0f;
-
-        //_gui->UpdateUI(frameTimer, _mouseButtons, _mousePos);
-        //if (_gui->UpdateBuffers()) {
-        //    BuildCommandBuffers();
-        //}
-
         BuildCommandBuffers(true);
     }
     vkDeviceWaitIdle(_vulkanDevice->_device);
@@ -1812,15 +1888,16 @@ void AppBase::CleanupSwapchain() {
     vkFreeMemory(_vulkanDevice->_device, _depthImageMemory, nullptr);
 
     _swapchain->Cleanup();
+    for (auto frameBuffer : _frameBuffers) {
+        vkDestroyFramebuffer(_vulkanDevice->_device, frameBuffer, nullptr);
+    }
 
     vkFreeCommandBuffers(_vulkanDevice->_device, _vulkanDevice->_commandPool, (uint32_t)_commandBuffers.size(), _commandBuffers.data());
 
     vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
     vkDestroyPipelineLayout(_vulkanDevice->_device, _pipelineLayout, nullptr);
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
-    
     glTF::GetglTF()->Cleanup();
-    //_gui->Cleanup();
 }
 
 void AppBase::Destroy() {
@@ -1830,7 +1907,9 @@ void AppBase::Destroy() {
     glTF::GetglTF()->Destroy();
     vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
     ImGui_ImplVulkan_Shutdown();
-    //_gui->Destroy();
+
+    vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.vert.handle, nullptr);
+    vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.frag.handle, nullptr);
 
     vkDestroySemaphore(_vulkanDevice->_device, _renderCompleteSemaphore, nullptr);
     vkDestroySemaphore(_vulkanDevice->_device, _presentCompleteSemaphore, nullptr);
@@ -1840,9 +1919,6 @@ void AppBase::Destroy() {
         DestroyDebugUtilsMessengerEXT(_instance, _debugMessenger, nullptr);
     }    
     
-    for (auto frameBuffer : _frameBuffers) {
-        vkDestroyFramebuffer(_vulkanDevice->_device, frameBuffer, nullptr);
-    }
     _vulkanDevice->Destroy();
 
     _swapchain->Destroy();
@@ -1852,6 +1928,5 @@ void AppBase::Destroy() {
     delete _swapchain;
     delete _shader;
     delete glTF::GetglTF();
-    //delete _gui;
     delete _camera;
 }

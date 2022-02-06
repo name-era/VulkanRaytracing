@@ -161,6 +161,12 @@ public:
     */
     void drawFrame();
 
+    void ShowMenuFile();
+    /**
+    * @brief    ImGuiウィンドウの作成
+    */
+    void SetImGuiWindow();
+
     /**
     * @brief    ループ
     */
@@ -199,7 +205,6 @@ public:
     VulkanDevice* _vulkanDevice;
     Swapchain* _swapchain;
     Shader* _shader;
-    Gui* _gui;
     Camera* _camera;
 
 
