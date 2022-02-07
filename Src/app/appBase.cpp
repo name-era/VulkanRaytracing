@@ -127,11 +127,6 @@ public:
         int32_t materialIndex;
     };
 
-    struct UniformBuffer {
-        VkBuffer buffer;
-        VkDeviceMemory memory;
-    }_uniformBuffer;
-
     struct UniformBlock {
         glm::mat4 projection;
         glm::mat4 model;
@@ -241,6 +236,7 @@ private:
 
     Vertices _vertices;
     Indices _indices;
+    Initializers::Buffer _uniformBuffer;
 
     VulkanDevice* _vulkanDevice;
 
@@ -661,6 +657,9 @@ void glTF::LoadFromFile(std::string filename) {
     VkDeviceSize bufferSize = sizeof(UniformBlock);
     _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _uniformBuffer.buffer, _uniformBuffer.memory);
 
+    vkMapMemory(_vulkanDevice->_device, _uniformBuffer.memory, 0, sizeof(_ubo), 0, &_uniformBuffer.mapped);
+    memcpy(_uniformBuffer.mapped, &_ubo, sizeof(_ubo));
+    vkUnmapMemory(_vulkanDevice->_device, _uniformBuffer.memory);
 }
 
 void glTF::CreateDescriptorPool() {
@@ -841,11 +840,7 @@ void glTF::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view) {
     _ubo.projection = projection;
     _ubo.model = view;
 
-    void* data;
-    vkMapMemory(_vulkanDevice->_device, _uniformBuffer.memory, 0, sizeof(_ubo), 0, &data);
-    memcpy(data, &_ubo, sizeof(_ubo));
-    vkUnmapMemory(_vulkanDevice->_device, _uniformBuffer.memory);
-
+    memcpy(_uniformBuffer.mapped, &_ubo, sizeof(_ubo));
 }
 
 void glTF::Recreate() {
@@ -1311,7 +1306,7 @@ void AppBase::CreateGraphicsPipeline() {
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
 
-    if (vkCreatePipelineLayout(_vulkanDevice->_device, &pipelineLayoutInfo, nullptr, &_pipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(_vulkanDevice->_device, &pipelineLayoutInfo, nullptr, &r_pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");
     }
 
@@ -1326,7 +1321,7 @@ void AppBase::CreateGraphicsPipeline() {
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.layout = _pipelineLayout;
+    pipelineInfo.layout = r_pipelineLayout;
     pipelineInfo.renderPass = _renderPass;
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -1537,9 +1532,9 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
 
         vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
         
-        vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout, 0, 1, &s_gltf->_uniformDescriptorSet, 0, nullptr);
+        vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, r_pipelineLayout, 0, 1, &s_gltf->_uniformDescriptorSet, 0, nullptr);
 
-        glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
+        glTF::GetglTF()->Draw(_commandBuffers[i], r_pipelineLayout);
 
         if (renderImgui) {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
@@ -1718,47 +1713,46 @@ void AppBase::CreateBLAS() {
         tri.size() * sizeof(Vertex),
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        _vertexBufferBLAS.buffer,
-        _vertexBufferBLAS.memory
+        r_vertexBufferBLAS.buffer,
+        r_vertexBufferBLAS.memory
     );
 
-    void* data;
-    vkMapMemory(_vulkanDevice->_device, _vertexBufferBLAS.memory, 0, tri.size() * sizeof(Vertex), 0, &data);
-    memcpy(data, _vertexBufferBLAS.buffer, tri.size() * sizeof(Vertex));
-    vkUnmapMemory(_vulkanDevice->_device, _vertexBufferBLAS.memory);
+    vkMapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory, 0, tri.size() * sizeof(Vertex), 0, &r_vertexBufferBLAS.mapped);
+    memcpy(r_vertexBufferBLAS.mapped, r_vertexBufferBLAS.buffer, tri.size() * sizeof(Vertex));
+    vkUnmapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory);
 
     _vulkanDevice->CreateBuffer(
         indices.size() * sizeof(uint32_t),
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        _indexBufferBLAS.buffer,
-        _indexBufferBLAS.memory
+        r_indexBufferBLAS.buffer,
+        r_indexBufferBLAS.memory
     );
 
-    vkMapMemory(_vulkanDevice->_device, _indexBufferBLAS.memory, 0, indices.size() * sizeof(uint32_t), 0, &data);
-    memcpy(data, _indexBufferBLAS.buffer, indices.size() * sizeof(uint32_t));
-    vkUnmapMemory(_vulkanDevice->_device, _indexBufferBLAS.memory);
+    vkMapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory, 0, indices.size() * sizeof(uint32_t), 0, &r_indexBufferBLAS.mapped);
+    memcpy(r_indexBufferBLAS.mapped, r_indexBufferBLAS.buffer, indices.size() * sizeof(uint32_t));
+    vkUnmapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory);
 
     _vulkanDevice->CreateBuffer(
         sizeof(VkTransformMatrixKHR),
         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        _transformBufferBLAS.buffer,
-        _transformBufferBLAS.memory
+        r_transformBufferBLAS.buffer,
+        r_transformBufferBLAS.memory
     );
 
-    vkMapMemory(_vulkanDevice->_device, _transformBufferBLAS.memory, 0, sizeof(VkTransformMatrixKHR), 0, &data);
-    memcpy(data, _transformBufferBLAS.buffer, sizeof(VkTransformMatrixKHR));
-    vkUnmapMemory(_vulkanDevice->_device, _transformBufferBLAS.memory);
+    vkMapMemory(_vulkanDevice->_device, r_transformBufferBLAS.memory, 0, sizeof(VkTransformMatrixKHR), 0, &r_transformBufferBLAS.mapped);
+    memcpy(r_transformBufferBLAS.mapped, r_transformBufferBLAS.buffer, sizeof(VkTransformMatrixKHR));
+    vkUnmapMemory(_vulkanDevice->_device, r_transformBufferBLAS.memory);
 
     VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
     VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
     VkDeviceOrHostAddressConstKHR transformBufferDeviceAddress{};
 
     //デバイスアドレスを取得
-    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_vertexBufferBLAS.buffer);
-    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_indexBufferBLAS.buffer);
-    transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_transformBufferBLAS.buffer);
+    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(r_vertexBufferBLAS.buffer);
+    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(r_indexBufferBLAS.buffer);
+    transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(r_transformBufferBLAS.buffer);
 
     VkAccelerationStructureGeometryKHR geometryInfo{};
     geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -1794,22 +1788,22 @@ void AppBase::CreateBLAS() {
         &buildSizesInfo
     );
 
-    CreateAccelerationStructureBuffer(_bottomLevelAS, buildSizesInfo);
+    CreateAccelerationStructureBuffer(r_bottomLevelAS, buildSizesInfo);
 
     //BLAS生成
     VkAccelerationStructureCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    createInfo.buffer = _bottomLevelAS.buffer;
+    createInfo.buffer = r_bottomLevelAS.buffer;
     createInfo.size = buildSizesInfo.accelerationStructureSize;
     createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-    vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &createInfo, nullptr, &_bottomLevelAS.handle);
+    vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &createInfo, nullptr, &r_bottomLevelAS.handle);
 
     //BLASの構築に必要なスクラッチ（作業）バッファの作成
     RayTracingScratchBuffer scratchBuffer = CreateScrachBuffer(buildSizesInfo.buildScratchSize);
 
     //VkAccelerationStructureBuildGeometryInfoKHRの他のパラメータ
     buildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    buildGeometryInfo.dstAccelerationStructure = _bottomLevelAS.handle;
+    buildGeometryInfo.dstAccelerationStructure = r_bottomLevelAS.handle;
     buildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
 
     //コマンドバッファにBLASの構築を登録する
@@ -1826,7 +1820,7 @@ void AppBase::CreateBLAS() {
     //メモリバリア
     VkBufferMemoryBarrier memoryBarrier{};
     memoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    memoryBarrier.buffer = _bottomLevelAS.buffer;
+    memoryBarrier.buffer = r_bottomLevelAS.buffer;
     memoryBarrier.size = VK_WHOLE_SIZE;
     memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     memoryBarrier.dstAccessMask = VK_QUEUE_FAMILY_IGNORED;
@@ -1844,8 +1838,8 @@ void AppBase::CreateBLAS() {
     //Acceleration Structureのデバイスアドレスを取得
     VkAccelerationStructureDeviceAddressInfoKHR deviceAddressInfo{};
     deviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-    deviceAddressInfo.accelerationStructure = _bottomLevelAS.handle;
-    _bottomLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &deviceAddressInfo);
+    deviceAddressInfo.accelerationStructure = r_bottomLevelAS.handle;
+    r_bottomLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &deviceAddressInfo);
 
     vkDestroyBuffer(_vulkanDevice->_device, scratchBuffer.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
@@ -1864,24 +1858,23 @@ void AppBase::CreateTRAS() {
     instance.mask = 0xFF;
     instance.instanceShaderBindingTableRecordOffset = 0;
     instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-    instance.accelerationStructureReference = _topLevelAS.deviceAddress;
+    instance.accelerationStructureReference = r_topLevelAS.deviceAddress;
     
     _vulkanDevice->CreateBuffer(
         sizeof(VkAccelerationStructureInstanceKHR),
         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        _instanceBuffer.buffer,
-        _instanceBuffer.memory
+        r_instanceBuffer.buffer,
+        r_instanceBuffer.memory
     );
 
-    void* data;
-    vkMapMemory(_vulkanDevice->_device, _instanceBuffer.memory, 0, sizeof(VkAccelerationStructureInstanceKHR), 0, &data);
-    memcpy(data, &instance, sizeof(VkAccelerationStructureInstanceKHR));
-    vkUnmapMemory(_vulkanDevice->_device, _instanceBuffer.memory);
+    vkMapMemory(_vulkanDevice->_device, r_instanceBuffer.memory, 0, sizeof(VkAccelerationStructureInstanceKHR), 0, &r_instanceBuffer.mapped);
+    memcpy(r_instanceBuffer.mapped, &instance, sizeof(VkAccelerationStructureInstanceKHR));
+    vkUnmapMemory(_vulkanDevice->_device, r_instanceBuffer.memory);
 
     //デバイスアドレスを取得
     VkDeviceOrHostAddressConstKHR instanceDataDeviceAddress{};
-    instanceDataDeviceAddress.deviceAddress = GetBufferDeviceAddress(_instanceBuffer.buffer);
+    instanceDataDeviceAddress.deviceAddress = GetBufferDeviceAddress(r_instanceBuffer.buffer);
 
     VkAccelerationStructureGeometryKHR geometryInfo{};
     geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -1910,22 +1903,22 @@ void AppBase::CreateTRAS() {
         &buildSizesInfo
     );
 
-    CreateAccelerationStructureBuffer(_topLevelAS, buildSizesInfo);
+    CreateAccelerationStructureBuffer(r_topLevelAS, buildSizesInfo);
 
     //TRAS生成
     VkAccelerationStructureCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    createInfo.buffer = _topLevelAS.buffer;
+    createInfo.buffer = r_topLevelAS.buffer;
     createInfo.size = buildSizesInfo.accelerationStructureSize;
     createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-    vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &createInfo, nullptr, &_topLevelAS.handle);
+    vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &createInfo, nullptr, &r_topLevelAS.handle);
     
     //TLASの構築に必要なスクラッチ（作業）バッファの作成
     RayTracingScratchBuffer scratchBuffer = CreateScrachBuffer(buildSizesInfo.buildScratchSize);
 
     //VkAccelerationStructureBuildGeometryInfoKHRの他のパラメータ
     buildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    buildGeometryInfo.dstAccelerationStructure = _topLevelAS.handle;
+    buildGeometryInfo.dstAccelerationStructure = r_topLevelAS.handle;
     buildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
 
     //コマンドバッファにTLASの構築を登録する
@@ -1942,7 +1935,7 @@ void AppBase::CreateTRAS() {
     //メモリバリア
     VkBufferMemoryBarrier memoryBarrier{};
     memoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    memoryBarrier.buffer = _topLevelAS.buffer;
+    memoryBarrier.buffer = r_topLevelAS.buffer;
     memoryBarrier.size = VK_WHOLE_SIZE;
     memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     memoryBarrier.dstAccessMask = VK_QUEUE_FAMILY_IGNORED;
@@ -1960,8 +1953,8 @@ void AppBase::CreateTRAS() {
     //Acceleration Structureのデバイスアドレスを取得
     VkAccelerationStructureDeviceAddressInfoKHR deviceAddressInfo{};
     deviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-    deviceAddressInfo.accelerationStructure = _topLevelAS.handle;
-    _topLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &deviceAddressInfo);
+    deviceAddressInfo.accelerationStructure = r_topLevelAS.handle;
+    r_topLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &deviceAddressInfo);
 
     vkDestroyBuffer(_vulkanDevice->_device, scratchBuffer.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
@@ -1972,12 +1965,73 @@ void AppBase::CreateStrageImage() {
     CreateImage(
         WIDTH, HEIGHT, 1, SWAPCHAINCOLORFORMAT, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, strageImage.image, strageImage.memory
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, r_strageImage.image, r_strageImage.memory
     );
 
-    CreateImageView(strageImage.image, SWAPCHAINCOLORFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    CreateImageView(r_strageImage.image, SWAPCHAINCOLORFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     
-    _vulkanDevice->TransitionImageLayout(strageImage.image, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,1);
+    _vulkanDevice->TransitionImageLayout(r_strageImage.image, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,1);
+
+}
+
+void AppBase::UpdateUniformBuffer() {
+    _uniformData.projInverse = glm::inverse(_camera->matrix.perspective);
+    _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
+    memcpy(r_ubo.mapped, &_uniformData, sizeof(_uniformData));
+}
+
+void AppBase::CreateUniformBuffer() {
+    VkDeviceSize bufferSize = sizeof(UniformBlock);
+    _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, r_ubo.buffer, r_ubo.memory);
+
+    vkMapMemory(_vulkanDevice->_device, r_ubo.memory, 0, sizeof(_uniformData), 0, &r_ubo.mapped);
+    memcpy(r_ubo.mapped, &r_ubo, sizeof(_uniformData));
+    vkUnmapMemory(_vulkanDevice->_device, r_ubo.memory);
+
+    UpdateUniformBuffer();
+}
+
+void AppBase::CreateRaytracingLayout() {
+
+    VkDescriptorSetLayoutBinding accelerationStructurelayoutBinding{};
+    accelerationStructurelayoutBinding.binding = 0;
+    accelerationStructurelayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    accelerationStructurelayoutBinding.descriptorCount = 1;
+    accelerationStructurelayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding resultImageLayoutBinding{};
+    resultImageLayoutBinding.binding = 1;
+    resultImageLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    resultImageLayoutBinding.descriptorCount = 1;
+    resultImageLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    VkDescriptorSetLayoutBinding uniformBufferBinding{};
+    uniformBufferBinding.binding = 2;
+    uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniformBufferBinding.descriptorCount = 1;
+    uniformBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+    std::vector<VkDescriptorSetLayoutBinding> bindings({
+        accelerationStructurelayoutBinding,
+        resultImageLayoutBinding,
+        uniformBufferBinding
+    });
+    
+    VkDescriptorSetLayoutCreateInfo descriptorSetCreateInfo{};
+    descriptorSetCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorSetCreateInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    descriptorSetCreateInfo.pBindings = bindings.data();
+    vkCreateDescriptorSetLayout(_vulkanDevice->_device, &descriptorSetCreateInfo, nullptr, &r_descriptorSetLayout);
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
+    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = &r_descriptorSetLayout;
+    vkCreatePipelineLayout(_vulkanDevice->_device, &pipelineLayoutCreateInfo, nullptr, &r_pipelineLayout);
+
+}
+
+void AppBase::CreateRaytracingPipeline() {
 
 }
 
@@ -1985,6 +2039,8 @@ void AppBase::InitRayTracing() {
     CreateBLAS();
     CreateTRAS();
     CreateStrageImage();
+    CreateUniformBuffer();
+    CreateRaytracingLayout();
 }
 /*******************************************************************************************************************
 *                                             描画
@@ -2207,7 +2263,7 @@ void AppBase::CleanupSwapchain() {
     vkFreeCommandBuffers(_vulkanDevice->_device, _vulkanDevice->_commandPool, (uint32_t)_commandBuffers.size(), _commandBuffers.data());
 
     vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
-    vkDestroyPipelineLayout(_vulkanDevice->_device, _pipelineLayout, nullptr);
+    vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
     glTF::GetglTF()->Cleanup();
 }

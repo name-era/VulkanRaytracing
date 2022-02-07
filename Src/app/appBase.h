@@ -53,6 +53,11 @@ public:
         VkImageView view;
     };
 
+    struct UniformBlock {
+        glm::mat4 viewInverse;
+        glm::mat4 projInverse;
+    }_uniformData;
+
     /**
     * @brief    コンストラクタ
     */
@@ -202,6 +207,25 @@ public:
     */
     void CreateStrageImage();
 
+    /**
+    * @brief    ユニフォームバッファを更新する
+    */
+    void UpdateUniformBuffer();
+    
+    /**
+    * @brief    ユニフォームバッファを作成する
+    */
+    void CreateUniformBuffer();
+
+    /**
+    * @brief    レイトレーシング用ディスクリプタセットレイアウト、パイプラインレイアウトを作成する
+    */
+    void CreateRaytracingLayout();
+
+    /**
+    * @brief    レイトレーシング用パイプラインを作成する
+    */
+    void CreateRaytracingPipeline();
 
     /**
     * @brief    レイトレーシング初期化
@@ -274,7 +298,7 @@ public:
     VkPhysicalDevice _physicalDevice;
     VkDebugUtilsMessengerEXT _debugMessenger;
     VkRenderPass _renderPass;
-    VkPipelineLayout _pipelineLayout;
+    VkPipelineLayout r_pipelineLayout;
     VkPipeline _pipeline;
     std::vector<VkFramebuffer> _frameBuffers;
 
@@ -307,14 +331,18 @@ public:
     //UI用
     VkDescriptorPool _descriptorPool;
 
-    //レイトレーシング
-    Initializers::Buffer _vertexBufferBLAS;
-    Initializers::Buffer _indexBufferBLAS;
-    Initializers::Buffer _transformBufferBLAS;
-    Initializers::Buffer _instanceBuffer;
+    //レイトレーシング（あとで別クラスにする）
+    Initializers::Buffer r_vertexBufferBLAS;
+    Initializers::Buffer r_indexBufferBLAS;
+    Initializers::Buffer r_transformBufferBLAS;
+    Initializers::Buffer r_instanceBuffer;
+    Initializers::Buffer r_ubo;
 
-    AccelerationStructure _bottomLevelAS;
-    AccelerationStructure _topLevelAS;
+    AccelerationStructure r_bottomLevelAS;
+    AccelerationStructure r_topLevelAS;
+    
+    Image r_strageImage;
 
-    Image strageImage;
+    VkDescriptorSetLayout r_descriptorSetLayout;
+    VkPipelineLayout r_pipelineLayout;
 };
