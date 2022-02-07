@@ -1810,77 +1810,78 @@ void AppBase::CreateBLAS() {
     VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
     VkDeviceOrHostAddressConstKHR transformBufferDeviceAddress{};
 
-    //BLASを作成する
+    //デバイスアドレスを取得
     vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_vertexBufferBLAS.buffer);
     indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_indexBufferBLAS.buffer);
     transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_transformBufferBLAS.buffer);
 
-    VkAccelerationStructureGeometryKHR accelerationGeometryInfo{};
-    accelerationGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-    accelerationGeometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-    accelerationGeometryInfo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-    accelerationGeometryInfo.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-    accelerationGeometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-    accelerationGeometryInfo.geometry.triangles.vertexData = vertexBufferDeviceAddress;
-    accelerationGeometryInfo.geometry.triangles.maxVertex = tri.size();
-    accelerationGeometryInfo.geometry.triangles.vertexStride = sizeof(Vertex);
-    accelerationGeometryInfo.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
-    accelerationGeometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
-    accelerationGeometryInfo.geometry.triangles.transformData.deviceAddress = 0;
-    accelerationGeometryInfo.geometry.triangles.transformData.hostAddress = nullptr;
-    accelerationGeometryInfo.geometry.triangles.transformData = transformBufferDeviceAddress;
+    VkAccelerationStructureGeometryKHR geometryInfo{};
+    geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    geometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    geometryInfo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    geometryInfo.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+    geometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+    geometryInfo.geometry.triangles.vertexData = vertexBufferDeviceAddress;
+    geometryInfo.geometry.triangles.maxVertex = tri.size();
+    geometryInfo.geometry.triangles.vertexStride = sizeof(Vertex);
+    geometryInfo.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+    geometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
+    geometryInfo.geometry.triangles.transformData.deviceAddress = 0;
+    geometryInfo.geometry.triangles.transformData.hostAddress = nullptr;
+    geometryInfo.geometry.triangles.transformData = transformBufferDeviceAddress;
 
     //サイズ情報を取得する
-    VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo{};
-    accelerationStructureBuildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-    accelerationStructureBuildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-    accelerationStructureBuildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-    accelerationStructureBuildGeometryInfo.geometryCount = 1;
-    accelerationStructureBuildGeometryInfo.pGeometries = &accelerationGeometryInfo;
+    VkAccelerationStructureBuildGeometryInfoKHR buildGeometryInfo{};
+    buildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    buildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    buildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    buildGeometryInfo.geometryCount = 1;
+    buildGeometryInfo.pGeometries = &geometryInfo;
 
-    const uint32_t numTriangles = 1;
-    VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo;
-    accelerationStructureBuildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    const uint32_t tirangleCount = 1;
+    VkAccelerationStructureBuildSizesInfoKHR buildSizesInfo;
+    buildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
     vkGetAccelerationStructureBuildSizesKHR(
         _vulkanDevice->_device,
         VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-        &accelerationStructureBuildGeometryInfo,
-        &numTriangles,
-        &accelerationStructureBuildSizesInfo
+        &buildGeometryInfo,
+        &tirangleCount,
+        &buildSizesInfo
     );
 
-    CreateAccelerationStructureBuffer(_bottomLevelAS, accelerationStructureBuildSizesInfo);
+    CreateAccelerationStructureBuffer(_bottomLevelAS, buildSizesInfo);
 
     //BLAS生成
-    VkAccelerationStructureCreateInfoKHR accelerationStructureCI{};
-    accelerationStructureCI.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    accelerationStructureCI.buffer = _bottomLevelAS.buffer;
-    accelerationStructureCI.size = accelerationStructureBuildSizesInfo.accelerationStructureSize;
-    accelerationStructureCI.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-    vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &accelerationStructureCI, nullptr, &_bottomLevelAS.handle);
+    VkAccelerationStructureCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    createInfo.buffer = _bottomLevelAS.buffer;
+    createInfo.size = buildSizesInfo.accelerationStructureSize;
+    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &createInfo, nullptr, &_bottomLevelAS.handle);
 
     //BLASの構築に必要なスクラッチ（作業）バッファの作成
-    RayTracingScratchBuffer scratchBuffer = CreateScrachBuffer(accelerationStructureBuildSizesInfo.buildScratchSize);
+    RayTracingScratchBuffer scratchBuffer = CreateScrachBuffer(buildSizesInfo.buildScratchSize);
 
     //VkAccelerationStructureBuildGeometryInfoKHRの他のパラメータ
-    accelerationStructureBuildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    accelerationStructureBuildGeometryInfo.dstAccelerationStructure = _bottomLevelAS.handle;
-    accelerationStructureBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
+    buildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    buildGeometryInfo.dstAccelerationStructure = _bottomLevelAS.handle;
+    buildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
 
     //コマンドバッファにBLASの構築を登録する
     VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo{};
-    buildRangeInfo.primitiveCount = numTriangles;
+    buildRangeInfo.primitiveCount = tirangleCount;
     buildRangeInfo.primitiveOffset = 0;
     buildRangeInfo.firstVertex = 0;
     buildRangeInfo.transformOffset = 0;
     std::vector<VkAccelerationStructureBuildRangeInfoKHR*> buildRangeInfos = { &buildRangeInfo };
 
     VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
-    vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &accelerationStructureBuildGeometryInfo, buildRangeInfos.data());
+    vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildGeometryInfo, buildRangeInfos.data());
 
     //メモリバリア
     VkBufferMemoryBarrier memoryBarrier{};
     memoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    memoryBarrier.buffer = _bottomLevelAS.buffer;
     memoryBarrier.size = VK_WHOLE_SIZE;
     memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     memoryBarrier.dstAccessMask = VK_QUEUE_FAMILY_IGNORED;
@@ -1896,10 +1897,10 @@ void AppBase::CreateBLAS() {
     _vulkanDevice->EndCommandAndWait(commandBuffer, _vulkanDevice->_queue);
 
     //Acceleration Structureのデバイスアドレスを取得
-    VkAccelerationStructureDeviceAddressInfoKHR accelerationStructureDeviceAddressInfo{};
-    accelerationStructureDeviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-    accelerationStructureDeviceAddressInfo.accelerationStructure = _bottomLevelAS.handle;
-    _bottomLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &accelerationStructureDeviceAddressInfo);
+    VkAccelerationStructureDeviceAddressInfoKHR deviceAddressInfo{};
+    deviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    deviceAddressInfo.accelerationStructure = _bottomLevelAS.handle;
+    _bottomLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &deviceAddressInfo);
 
     vkDestroyBuffer(_vulkanDevice->_device, scratchBuffer.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
@@ -1918,7 +1919,7 @@ void AppBase::CreateTRAS() {
     instance.mask = 0xFF;
     instance.instanceShaderBindingTableRecordOffset = 0;
     instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-    instance.accelerationStructureReference = _bottomLevelAS.deviceAddress;
+    instance.accelerationStructureReference = _topLevelAS.deviceAddress;
     
     _vulkanDevice->CreateBuffer(
         sizeof(VkAccelerationStructureInstanceKHR),
@@ -1933,16 +1934,92 @@ void AppBase::CreateTRAS() {
     memcpy(data, &instance, sizeof(VkAccelerationStructureInstanceKHR));
     vkUnmapMemory(_vulkanDevice->_device, _instanceBuffer.memory);
 
-
+    //デバイスアドレスを取得
     VkDeviceOrHostAddressConstKHR instanceDataDeviceAddress{};
     instanceDataDeviceAddress.deviceAddress = GetBufferDeviceAddress(_instanceBuffer.buffer);
 
-    VkAccelerationStructureGeometryKHR accelerationGeometryInfo{};
-    accelerationGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-    accelerationGeometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-    accelerationGeometryInfo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    VkAccelerationStructureGeometryKHR geometryInfo{};
+    geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    geometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    geometryInfo.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    geometryInfo.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    geometryInfo.geometry.instances.arrayOfPointers = VK_FALSE;
+    geometryInfo.geometry.instances.data = instanceDataDeviceAddress;
 
+    //サイズ情報を取得する
+    VkAccelerationStructureBuildGeometryInfoKHR buildGeometryInfo{};
+    buildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    buildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    buildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    buildGeometryInfo.geometryCount = 1;
+    buildGeometryInfo.pGeometries = &geometryInfo;
 
+    uint32_t primiticeCount = 1;
+    VkAccelerationStructureBuildSizesInfoKHR buildSizesInfo;
+    buildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+    vkGetAccelerationStructureBuildSizesKHR(
+        _vulkanDevice->_device,
+        VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+        &buildGeometryInfo,
+        &primiticeCount,
+        &buildSizesInfo
+    );
+
+    CreateAccelerationStructureBuffer(_topLevelAS, buildSizesInfo);
+
+    //TRAS生成
+    VkAccelerationStructureCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    createInfo.buffer = _topLevelAS.buffer;
+    createInfo.size = buildSizesInfo.accelerationStructureSize;
+    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &createInfo, nullptr, &_topLevelAS.handle);
+    
+    //TLASの構築に必要なスクラッチ（作業）バッファの作成
+    RayTracingScratchBuffer scratchBuffer = CreateScrachBuffer(buildSizesInfo.buildScratchSize);
+
+    //VkAccelerationStructureBuildGeometryInfoKHRの他のパラメータ
+    buildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    buildGeometryInfo.dstAccelerationStructure = _topLevelAS.handle;
+    buildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
+
+    //コマンドバッファにTLASの構築を登録する
+    VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo{};
+    buildRangeInfo.primitiveCount = primiticeCount;
+    buildRangeInfo.primitiveOffset = 0;
+    buildRangeInfo.firstVertex = 0;
+    buildRangeInfo.transformOffset = 0;
+    std::vector<VkAccelerationStructureBuildRangeInfoKHR*> buildRangeInfos = { &buildRangeInfo };
+
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
+    vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildGeometryInfo, buildRangeInfos.data());
+
+    //メモリバリア
+    VkBufferMemoryBarrier memoryBarrier{};
+    memoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    memoryBarrier.buffer = _topLevelAS.buffer;
+    memoryBarrier.size = VK_WHOLE_SIZE;
+    memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    memoryBarrier.dstAccessMask = VK_QUEUE_FAMILY_IGNORED;
+    memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+    memoryBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+        VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+        0, 0, nullptr, 1, &memoryBarrier, 0, nullptr
+    );
+
+    _vulkanDevice->EndCommandAndWait(commandBuffer, _vulkanDevice->_queue);
+
+    //Acceleration Structureのデバイスアドレスを取得
+    VkAccelerationStructureDeviceAddressInfoKHR deviceAddressInfo{};
+    deviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    deviceAddressInfo.accelerationStructure = _topLevelAS.handle;
+    _topLevelAS.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &deviceAddressInfo);
+
+    vkDestroyBuffer(_vulkanDevice->_device, scratchBuffer.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
 /*******************************************************************************************************************

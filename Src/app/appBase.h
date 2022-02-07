@@ -297,4 +297,5 @@ public:
     Initializers::Buffer _instanceBuffer;
 
     AccelerationStructure _bottomLevelAS;
+    AccelerationStructure _topLevelAS;
 };
