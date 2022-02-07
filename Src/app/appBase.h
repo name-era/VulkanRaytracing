@@ -325,8 +325,6 @@ public:
     float frameTimer = 0.0f;
     Initializers::MouseButtons _mouseButtons;
     bool _framebufferResized;
-
-    Shader::ShaderModules _shaderModules;
     
     //UI—p
     VkDescriptorPool _descriptorPool;
@@ -345,4 +343,7 @@ public:
 
     VkDescriptorSetLayout r_descriptorSetLayout;
     VkPipelineLayout r_pipelineLayout;
+    VkPipeline r_pipeline;
+    std::vector<VkRayTracingShaderGroupCreateInfoKHR> r_shaderGroups;
+
 };

@@ -22,7 +22,7 @@ namespace Initializers {
 		VkBuffer buffer;
 		VkDeviceMemory memory;
 		int count;
-		void* data;
+		void* mapped;
 
 		void flush(VkDevice& device, size_t uploadSize)
 		{

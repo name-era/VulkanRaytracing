@@ -50,12 +50,11 @@ std::vector<std::vector<Shader::UniformBinding>> Shader::GetUniformDescriptions(
     return descriptions;
 }
 
-Shader::ShaderModuleInfo Shader::CreateShaderModule(const std::vector<char>& code, VkShaderStageFlagBits stage) {
+VkShaderModule Shader::CreateShaderModule(const std::vector<char>& code) {
 
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.codeSize = code.size();
-    //ポインターをchar型からuint32_t型へキャストする
     createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
     VkShaderModule shaderModule;
@@ -63,30 +62,27 @@ Shader::ShaderModuleInfo Shader::CreateShaderModule(const std::vector<char>& cod
         throw std::runtime_error("failed to create shader module!");
     }
 
-    ShaderModuleInfo module;
-    module.handle = shaderModule;
-    module.stage = stage;
 
-    SpvReflectShaderModule ref;
-    SpvReflectResult result = spvReflectCreateShaderModule(code.size(), code.data(), &ref);
-    assert(result == SPV_REFLECT_RESULT_SUCCESS);
+    //SpvReflectShaderModule ref;
+    //SpvReflectResult result = spvReflectCreateShaderModule(code.size(), code.data(), &ref);
+    //assert(result == SPV_REFLECT_RESULT_SUCCESS);
+    //GetUniformDescriptions(&ref);
 
-    module.uniforms = GetUniformDescriptions(&ref);
-
-    return module;
+    return shaderModule;
 }
 
-Shader::ShaderModules Shader::LoadShaderPrograms(std::string vertFileName, std::string fragFileName) {
+VkPipelineShaderStageCreateInfo Shader::LoadShaderProgram(std::string shaderFileName, VkShaderStageFlagBits stage) {
+    
+    auto shaderCode = ReadFile(shaderFileName);
+    VkShaderModule shaderModule = CreateShaderModule(shaderCode);
 
-    auto vertShaderCode = ReadFile(vertFileName);
-    auto fragShaderCode = ReadFile(fragFileName);
+    VkPipelineShaderStageCreateInfo shaderStage;
+    shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStage.stage = stage;
+    shaderStage.module = shaderModule;
+    shaderStage.pName = "main";
 
-    ShaderModuleInfo vertShaderModule = CreateShaderModule(vertShaderCode, VK_SHADER_STAGE_VERTEX_BIT);
-    ShaderModuleInfo fragShaderModule = CreateShaderModule(fragShaderCode, VK_SHADER_STAGE_FRAGMENT_BIT);
-
-    Shader::ShaderModules result = { vertShaderModule, fragShaderModule };
-
-    return result;
+    return shaderStage;
 }
 
 void Shader::Connect(VulkanDevice* device) {

@@ -414,7 +414,7 @@ bool Gui::UpdateBuffers() {
         _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, _vertexBuffer.buffer, _vertexBuffer.memory);
         _vertexBuffer.count = imDrawData->TotalVtxCount;
         
-        vkMapMemory(_vulkanDevice->_device, _vertexBuffer.memory, 0, vertexBufferSize, 0, &_vertexBuffer.data);
+        vkMapMemory(_vulkanDevice->_device, _vertexBuffer.memory, 0, vertexBufferSize, 0, &_vertexBuffer.mapped);
         IsUpdateCmdBuffers = true;
     }
 
@@ -424,13 +424,13 @@ bool Gui::UpdateBuffers() {
         _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, _indexBuffer.buffer, _indexBuffer.memory);
         _indexBuffer.count= imDrawData->TotalIdxCount;
 
-        vkMapMemory(_vulkanDevice->_device, _indexBuffer.memory, 0, indexBufferSize, 0, &_indexBuffer.data);
+        vkMapMemory(_vulkanDevice->_device, _indexBuffer.memory, 0, indexBufferSize, 0, &_indexBuffer.mapped);
         IsUpdateCmdBuffers = true;
     }
 
     // Upload data
-    ImDrawVert* vtxDst = (ImDrawVert*)_vertexBuffer.data;
-    ImDrawIdx* idxDst = (ImDrawIdx*)_indexBuffer.data;
+    ImDrawVert* vtxDst = (ImDrawVert*)_vertexBuffer.mapped;
+    ImDrawIdx* idxDst = (ImDrawIdx*)_indexBuffer.mapped;
 
     for (int n = 0; n < imDrawData->CmdListsCount; n++) {
         const ImDrawList* cmd_list = imDrawData->CmdLists[n];

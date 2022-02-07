@@ -13,7 +13,7 @@
 #include "device.h"
 
 
-
+//後でspirv-reflectを使うためにクラスにしておきたい
 class Shader {
 
 public:
@@ -26,12 +26,6 @@ public:
         uint32_t count;
     };
 
-    struct ShaderModuleInfo {
-        VkShaderModule handle;
-        VkShaderStageFlagBits stage;
-        std::vector<std::vector<UniformBinding>> uniforms;
-    };
-
     struct BindingInfo {
         uint32_t binding;
         VkDescriptorType type;
@@ -40,31 +34,34 @@ public:
     struct Pipeline {
         VkPipelineLayout pipelineLayout;
         VkPipeline graphicsPipeline;
-        
         VkDescriptorPool descriptorPool;
         VkDescriptorSet descriptorSet;
         std::vector<BindingInfo> bindingInfo;
     };
 
-    struct ShaderModules {
-        Shader::ShaderModuleInfo vert;
-        Shader::ShaderModuleInfo frag;
-    };
-
-
-    //シェーダファイルを読み込む
+    /**
+    * @brief    シェーダファイルを読み込む
+    */
     static std::vector<char> ReadFile(const std::string& filename);
 
-    //ユニフォーム変数の情報を取得する
+    /**
+    * @brief    ユニフォーム変数の情報を取得する
+    */
     std::vector<std::vector<UniformBinding>> GetUniformDescriptions(SpvReflectShaderModule* module);
+    
+    /**
+    * @brief    シェーダモジュールを作成する
+    */
+    VkShaderModule CreateShaderModule(const std::vector<char>& code);
+    
+    /**
+    * @brief    シェーダーを読み込む
+    */
+    VkPipelineShaderStageCreateInfo LoadShaderProgram(std::string shaderFileName, VkShaderStageFlagBits stage);
 
-    //シェーダモジュールを作成する
-    ShaderModuleInfo CreateShaderModule(const std::vector<char>& code, VkShaderStageFlagBits stage);
-
-    //シェーダーファイルを読み込んでシェーダーモジュールを作成する
-    ShaderModules LoadShaderPrograms(std::string vertFileName, std::string fragFileName);
-  
-
+    /**
+    * @brief    初期化
+    */
     void Connect(VulkanDevice* device);
 
 
