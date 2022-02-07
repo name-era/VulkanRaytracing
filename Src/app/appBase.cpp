@@ -265,6 +265,7 @@ namespace {
         VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
         VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
         //VK_KHR_acceleration_structureで必要
+        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
         //descriptor indexing に必要
         VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
@@ -1672,6 +1673,13 @@ void AppBase::Initialize() {
     _camera->setPosition(glm::vec3(0.0f, -0.1f, -1.0f));
     _camera->setRotation(glm::vec3(0.0f, -135.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 256.0f);
+
+    load_VK_EXTENSIONS(
+        _instance,
+        vkGetInstanceProcAddr,
+        _vulkanDevice->_device,
+        vkGetDeviceProcAddr
+    );
 }
 
 /*******************************************************************************************************************
@@ -1782,7 +1790,6 @@ void AppBase::CreateBLAS() {
         _indexBufferBLAS.memory
     );
 
-    void* data;
     vkMapMemory(_vulkanDevice->_device, _indexBufferBLAS.memory, 0, indices.size() * sizeof(uint32_t), 0, &data);
     memcpy(data, _indexBufferBLAS.buffer, indices.size() * sizeof(uint32_t));
     vkUnmapMemory(_vulkanDevice->_device, _indexBufferBLAS.memory);
@@ -1795,7 +1802,6 @@ void AppBase::CreateBLAS() {
         _transformBufferBLAS.memory
     );
 
-    void* data;
     vkMapMemory(_vulkanDevice->_device, _transformBufferBLAS.memory, 0, sizeof(VkTransformMatrixKHR), 0, &data);
     memcpy(data, _transformBufferBLAS.buffer, sizeof(VkTransformMatrixKHR));
     vkUnmapMemory(_vulkanDevice->_device, _transformBufferBLAS.memory);
@@ -1897,6 +1903,46 @@ void AppBase::CreateBLAS() {
 
     vkDestroyBuffer(_vulkanDevice->_device, scratchBuffer.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
+}
+
+void AppBase::CreateTRAS() {
+    VkTransformMatrixKHR transformMatrix = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f 
+    };
+
+    VkAccelerationStructureInstanceKHR instance{};
+    instance.transform = transformMatrix;
+    instance.instanceCustomIndex = 0;
+    instance.mask = 0xFF;
+    instance.instanceShaderBindingTableRecordOffset = 0;
+    instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+    instance.accelerationStructureReference = _bottomLevelAS.deviceAddress;
+    
+    _vulkanDevice->CreateBuffer(
+        sizeof(VkAccelerationStructureInstanceKHR),
+        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        _instanceBuffer.buffer,
+        _instanceBuffer.memory
+    );
+
+    void* data;
+    vkMapMemory(_vulkanDevice->_device, _instanceBuffer.memory, 0, sizeof(VkAccelerationStructureInstanceKHR), 0, &data);
+    memcpy(data, &instance, sizeof(VkAccelerationStructureInstanceKHR));
+    vkUnmapMemory(_vulkanDevice->_device, _instanceBuffer.memory);
+
+
+    VkDeviceOrHostAddressConstKHR instanceDataDeviceAddress{};
+    instanceDataDeviceAddress.deviceAddress = GetBufferDeviceAddress(_instanceBuffer.buffer);
+
+    VkAccelerationStructureGeometryKHR accelerationGeometryInfo{};
+    accelerationGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+    accelerationGeometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    accelerationGeometryInfo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+
+
 }
 
 /*******************************************************************************************************************

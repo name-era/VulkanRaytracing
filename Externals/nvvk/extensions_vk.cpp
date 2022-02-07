@@ -19,7 +19,6 @@
 
 #include <assert.h>
 #include "extensions_vk.hpp"
-#include "nvh/nvprint.hpp"
 
 /* NVVK_GENERATE_VERSION_INFO */
 // Generated using Vulkan 176

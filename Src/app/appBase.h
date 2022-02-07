@@ -11,6 +11,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <glfw3.h>
 #include <vulkan/vulkan.h>
+#include <extensions_vk.hpp>
 
 #include <stdexcept>
 #include <vector>
@@ -24,8 +25,6 @@
 #include "gui.h"
 #include "shader.h"
 #include "common.h"
-
-
 
 class AppBase
 {
@@ -183,9 +182,14 @@ public:
     RayTracingScratchBuffer CreateScrachBuffer(VkDeviceSize size);
 
     /**
-    * @brief    BLASを作成する
+    * @brief    BLASを構築する
     */
     void CreateBLAS();
+
+    /**
+    * @brief    TRASを構築する
+    */
+    void CreateTRAS();
 
     /*******************************************************************************************************************
     *                                             ループ内
@@ -290,6 +294,7 @@ public:
     Initializers::Buffer _vertexBufferBLAS;
     Initializers::Buffer _indexBufferBLAS;
     Initializers::Buffer _transformBufferBLAS;
+    Initializers::Buffer _instanceBuffer;
 
     AccelerationStructure _bottomLevelAS;
 };
