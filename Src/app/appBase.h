@@ -47,6 +47,12 @@ public:
         VkDeviceMemory memory = VK_NULL_HANDLE;
     };
 
+    struct Image {
+        VkImage image;
+        VkDeviceMemory memory;
+        VkImageView view;
+    };
+
     /**
     * @brief    コンストラクタ
     */
@@ -191,6 +197,17 @@ public:
     */
     void CreateTRAS();
 
+    /**
+    * @brief    Strage Imageを構築する
+    */
+    void CreateStrageImage();
+
+
+    /**
+    * @brief    レイトレーシング初期化
+    */
+    void InitRayTracing();
+
     /*******************************************************************************************************************
     *                                             ループ内
     ********************************************************************************************************************/
@@ -298,4 +315,6 @@ public:
 
     AccelerationStructure _bottomLevelAS;
     AccelerationStructure _topLevelAS;
+
+    Image strageImage;
 };

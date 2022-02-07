@@ -86,11 +86,6 @@ public:
         void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
 
         /**
-        * @brief    イメージレイアウトの作成
-        */
-        void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
-
-        /**
         * @brief    バッファをイメージにコピーする
         */
         void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
@@ -314,55 +309,6 @@ void glTF::Texture::CreateImage(uint32_t width, uint32_t height, uint32_t mipLev
     vkBindImageMemory(vulkanDevice->_device, image, imageMemory, 0);
 }
 
-void glTF::Texture::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
-    VkCommandBuffer commandBuffer = vulkanDevice->BeginCommand();
-
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = mipLevels;
-    //barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-
-    VkPipelineStageFlags sourceStage;
-    VkPipelineStageFlags destinationStage;
-
-    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    }
-    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    }
-    else {
-        throw std::invalid_argument("unsupported layout transition!");
-    }
-
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        sourceStage, destinationStage,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &barrier
-    );
-
-    vulkanDevice->EndCommand(commandBuffer, queue);
-}
-
 void glTF::Texture::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
     VkCommandBuffer commandBuffer = vulkanDevice->BeginCommand();
 
@@ -401,9 +347,9 @@ void glTF::Texture::PrepareImage(void* buffer, VkDeviceSize bufferSize, VkFormat
     vkUnmapMemory(vulkanDevice->_device, stagingBufferMemory);
 
     CreateImage(texWidth, texHeight, mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
-    TransitionImageLayout(textureImage, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevel);
+    vulkanDevice->TransitionImageLayout(textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevel);
     CopyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    TransitionImageLayout(textureImage, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevel);
+    vulkanDevice->TransitionImageLayout(textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevel);
 
     vkDestroyBuffer(vulkanDevice->_device, stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice->_device, stagingBufferMemory, nullptr);
@@ -420,7 +366,6 @@ void glTF::Texture::CreateImageView(VkImage image, VkFormat format, VkImageAspec
     viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
-
 
     if (vkCreateImageView(vulkanDevice->_device, &viewInfo, nullptr, &textureImageView) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
@@ -1206,7 +1151,7 @@ void AppBase::PickupPhysicalDevice() {
 
 void AppBase::CreateRenderPass() {
     VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = SRGBCOLORFORMAT;
+    colorAttachment.format = SWAPCHAINCOLORFORMAT;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -2022,6 +1967,25 @@ void AppBase::CreateTRAS() {
     vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
+void AppBase::CreateStrageImage() {
+    
+    CreateImage(
+        WIDTH, HEIGHT, 1, SWAPCHAINCOLORFORMAT, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, strageImage.image, strageImage.memory
+    );
+
+    CreateImageView(strageImage.image, SWAPCHAINCOLORFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    
+    _vulkanDevice->TransitionImageLayout(strageImage.image, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,1);
+
+}
+
+void AppBase::InitRayTracing() {
+    CreateBLAS();
+    CreateTRAS();
+    CreateStrageImage();
+}
 /*******************************************************************************************************************
 *                                             描画
 ********************************************************************************************************************/

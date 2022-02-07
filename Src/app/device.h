@@ -30,7 +30,6 @@ struct VulkanDevice {
         uint32_t transfer;
     }_queueFamilyIndices;
 
-
     /**
     * @brief    メモリタイプを探す
     */
@@ -70,6 +69,11 @@ struct VulkanDevice {
     * @brief    バッファをコピーする
     */
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+
+    /**
+    * @brief    イメージレイアウトの作成
+    */
+    void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
 
     /**
     * @brief    コマンドバッファの記録開始
