@@ -245,6 +245,11 @@ public:
     void CreateShaderBindingTable();
 
     /**
+    * @brief    ディスクリプタセットを作成する
+    */
+    void CreateDescriptorSets();
+
+    /**
     * @brief    レイトレーシング初期化
     */
     void InitRayTracing();
@@ -361,6 +366,9 @@ public:
     Image r_strageImage;
 
     VkDescriptorSetLayout r_descriptorSetLayout;
+    VkDescriptorPool r_descriptorPool;
+    VkDescriptorSet r_descriptorSet;
+
     VkPipelineLayout r_pipelineLayout;
     VkPipeline r_pipeline;
     std::vector<VkRayTracingShaderGroupCreateInfoKHR> r_shaderGroups;

@@ -2123,6 +2123,76 @@ void AppBase::CreateShaderBindingTable() {
     memcpy(r_hitShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * hitShaderIndex, handleSize);
 }
 
+void AppBase::CreateDescriptorSets() {
+    
+    //create descriptorSet
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = _descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &r_descriptorSetLayout;
+
+    if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &r_descriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate descriptor sets!");
+    }
+
+    //create descriptorPool
+    std::vector<VkDescriptorPoolSize> poolSizes = {
+        { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR , 1 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE , 1 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , 1 }
+    };
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = 1;
+
+    if (vkCreateDescriptorPool(_vulkanDevice->_device, &poolInfo, nullptr, &r_descriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor pool!");
+    }
+
+    //update descriptorSet
+    VkWriteDescriptorSetAccelerationStructureKHR accelerationInfo{};
+    accelerationInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+    accelerationInfo.accelerationStructureCount = 1;
+    accelerationInfo.pAccelerationStructures = &r_topLevelAS.handle;
+    
+    std::array<VkWriteDescriptorSet, 3>writeDescriptorSet{};
+    writeDescriptorSet[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet[0].pNext = &accelerationInfo;
+    writeDescriptorSet[0].dstSet = r_descriptorSet;
+    writeDescriptorSet[0].dstBinding = 0;
+    writeDescriptorSet[0].descriptorCount = 1;
+    writeDescriptorSet[0].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageView = r_strageImage.view;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    writeDescriptorSet[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet[1].dstSet = r_descriptorSet;
+    writeDescriptorSet[1].dstBinding = 1;
+    writeDescriptorSet[1].descriptorCount = 1;
+    writeDescriptorSet[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writeDescriptorSet[1].pImageInfo = &imageInfo;
+
+    VkDescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = r_ubo.buffer;
+    bufferInfo.offset = 0;
+    bufferInfo.range = sizeof(UniformBlock);
+
+    writeDescriptorSet[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet[1].dstSet = r_descriptorSet;
+    writeDescriptorSet[1].dstBinding = 2;
+    writeDescriptorSet[1].descriptorCount = 1;
+    writeDescriptorSet[1].pBufferInfo = &bufferInfo;
+
+    vkUpdateDescriptorSets(_vulkanDevice->_device, writeDescriptorSet.size(), writeDescriptorSet.data(), 0, VK_NULL_HANDLE);
+
+}
+
 void AppBase::InitRayTracing() {
     CreateBLAS();
     CreateTRAS();
@@ -2130,6 +2200,8 @@ void AppBase::InitRayTracing() {
     CreateUniformBuffer();
     CreateRaytracingLayout();
     CreateRaytracingPipeline();
+    CreateShaderBindingTable();
+    CreateDescriptorSets();
 }
 /*******************************************************************************************************************
 *                                             •`‰æ
