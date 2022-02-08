@@ -314,24 +314,20 @@ public:
     Shader* _shader;
     Camera* _camera;
 
-
     GLFWwindow* _window;
     VkInstance _instance;
     VkPhysicalDevice _physicalDevice;
     VkDebugUtilsMessengerEXT _debugMessenger;
     VkRenderPass _renderPass;
+    VkPipelineLayout _pipelineLayout;
     VkPipeline _pipeline;
     std::vector<VkFramebuffer> _frameBuffers;
-
-
     uint32_t _mipLevels;
-
 
     //depth
     VkImage _depthImage;
     VkDeviceMemory _depthImageMemory;
     VkImageView _depthImageView;
-
 
     VkCommandPool _commandPool;
     std::vector<VkCommandBuffer> _commandBuffers;
@@ -372,5 +368,9 @@ public:
     VkPipelineLayout r_pipelineLayout;
     VkPipeline r_pipeline;
     std::vector<VkRayTracingShaderGroupCreateInfoKHR> r_shaderGroups;
+
+    VkStridedDeviceAddressRegionKHR raygenRegion;
+    VkStridedDeviceAddressRegionKHR missRegion;
+    VkStridedDeviceAddressRegionKHR hitRegion;
 
 };

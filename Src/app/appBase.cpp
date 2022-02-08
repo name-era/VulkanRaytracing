@@ -1296,7 +1296,7 @@ void AppBase::CreateGraphicsPipeline() {
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
 
-    if (vkCreatePipelineLayout(_vulkanDevice->_device, &pipelineLayoutInfo, nullptr, &r_pipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(_vulkanDevice->_device, &pipelineLayoutInfo, nullptr, &_pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create pipeline layout!");
     }
 
@@ -1520,12 +1520,19 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
 
         vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
-        
-        vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, r_pipelineLayout, 0, 1, &s_gltf->_uniformDescriptorSet, 0, nullptr);
+        //レイトレーシングを行う
+        vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
+        vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, 0, nullptr);
+        VkStridedDeviceAddressRegionKHR callableSbtEntry{};
+        vkCmdTraceRaysKHR(
+            _commandBuffers[i],
+            &raygenRegion, &missRegion, &hitRegion, &callableSbtEntry,
+            WIDTH, HEIGHT, 1
+        );
 
-        glTF::GetglTF()->Draw(_commandBuffers[i], r_pipelineLayout);
+        //レイトレーシングの結果をバックバッファに
 
+        //glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
         if (renderImgui) {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
         }
@@ -1574,18 +1581,18 @@ void AppBase::Initialize() {
     _swapchain->CreateSwapChain();
 
     CreateRenderPass();
-    
-    //load gltf model
     _vulkanDevice->CreateCommandPool();
-    glTF::GetglTF()->Connect(_vulkanDevice);
-    glTF::GetglTF()->LoadFromFile("Assets/flightHelmet/FlightHelmet.gltf");
-    glTF::GetglTF()->CreateDescriptors();
-
+    
     //raytracing用に変更する
-    _shader = new Shader();
-    _shader->Connect(_vulkanDevice);
-    CreateGraphicsPipeline();
+    //load gltf model
+    //glTF::GetglTF()->Connect(_vulkanDevice);
+    //glTF::GetglTF()->LoadFromFile("Assets/flightHelmet/FlightHelmet.gltf");
+    //glTF::GetglTF()->CreateDescriptors();
+    //_shader = new Shader();
+    //_shader->Connect(_vulkanDevice);
+    //CreateGraphicsPipeline();
 
+    InitRayTracing();
 
     PrepareGUI();
 
@@ -1594,8 +1601,6 @@ void AppBase::Initialize() {
     CreateCommandBuffers();
     BuildCommandBuffers(false);
     CreateSyncObjects();
-
-
 
     _camera = new Camera();
     _camera->type = Camera::CameraType::lookat;
@@ -2099,9 +2104,9 @@ void AppBase::CreateShaderBindingTable() {
     
     //各エントリのサイズを求める
     const uint32_t handleSize = raytracingPipelineProperties.shaderGroupHandleSize;
-    const uint32_t handleAlignment = raytracingPipelineProperties.shaderGroupHandleAlignment;
-    const uint32_t handleSizeAligned = tools::GetAlinedSize(handleSize, handleAlignment);
-    const uint32_t shaderGroupSize = r_shaderGroups.size() * handleAlignment;
+    const uint32_t handleAligned = raytracingPipelineProperties.shaderGroupHandleAlignment;
+    const uint32_t handleSizeAligned = tools::GetAlinedSize(handleSize, handleAligned);
+    const uint32_t shaderGroupSize = r_shaderGroups.size() * handleAligned;
 
     //シェーダーグループのハンドルを取得する
     std::vector<uint8_t> shaderHandleStorage(shaderGroupSize);
@@ -2121,6 +2126,18 @@ void AppBase::CreateShaderBindingTable() {
     memcpy(r_raygenShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * raygenShaderIndex, handleSize);
     memcpy(r_missShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * missShaderIndex, handleSize);
     memcpy(r_hitShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * hitShaderIndex, handleSize);
+
+    raygenRegion.deviceAddress = GetBufferDeviceAddress(r_raygenShaderBindingTable.buffer);
+    raygenRegion.stride = handleSizeAligned;
+    raygenRegion.size = handleSizeAligned;
+
+    missRegion.deviceAddress = GetBufferDeviceAddress(r_missShaderBindingTable.buffer);
+    missRegion.stride = handleSizeAligned;
+    missRegion.size = handleSizeAligned;
+
+    hitRegion.deviceAddress = GetBufferDeviceAddress(r_hitShaderBindingTable.buffer);
+    hitRegion.stride = handleAligned;
+    hitRegion.size = handleAligned;
 }
 
 void AppBase::CreateDescriptorSets() {
@@ -2203,6 +2220,7 @@ void AppBase::InitRayTracing() {
     CreateShaderBindingTable();
     CreateDescriptorSets();
 }
+
 /*******************************************************************************************************************
 *                                             描画
 ********************************************************************************************************************/
