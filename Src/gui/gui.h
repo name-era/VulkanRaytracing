@@ -145,8 +145,6 @@ private:
     VkDescriptorPool _descriptorPool;
     VkDescriptorSetLayout _descriptorSetLayout;
     VkDescriptorSet _descriptorSet;
-    
-    Shader::ShaderModules _shaderModules;
 
     const uint32_t _width = 200;
     const uint32_t _height = 200;

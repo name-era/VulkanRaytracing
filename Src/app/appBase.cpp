@@ -2080,6 +2080,49 @@ void AppBase::CreateRaytracingPipeline() {
     vkCreateRayTracingPipelinesKHR(_vulkanDevice->_device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &r_pipeline);
 }
 
+VkPhysicalDeviceRayTracingPipelinePropertiesKHR AppBase::GetRayTracingPipelineProperties() {
+
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR pipelineProperties;
+    pipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+
+    VkPhysicalDeviceProperties2 deviceProperties;
+    deviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    deviceProperties.pNext = &pipelineProperties;
+
+    vkGetPhysicalDeviceProperties2(_physicalDevice, &deviceProperties);
+
+    return pipelineProperties;
+}
+
+void AppBase::CreateShaderBindingTable() {
+    const auto raytracingPipelineProperties = GetRayTracingPipelineProperties();
+    
+    //各エントリのサイズを求める
+    const uint32_t handleSize = raytracingPipelineProperties.shaderGroupHandleSize;
+    const uint32_t handleAlignment = raytracingPipelineProperties.shaderGroupHandleAlignment;
+    const uint32_t handleSizeAligned = tools::GetAlinedSize(handleSize, handleAlignment);
+    const uint32_t shaderGroupSize = r_shaderGroups.size() * handleAlignment;
+
+    //シェーダーグループのハンドルを取得する
+    std::vector<uint8_t> shaderHandleStorage(shaderGroupSize);
+    vkGetRayTracingShaderGroupHandlesKHR(_vulkanDevice->_device, r_pipeline, 0, r_shaderGroups.size(), shaderGroupSize, shaderHandleStorage.data());
+
+    const VkBufferUsageFlags bufferUsageFlags = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    const VkMemoryPropertyFlags propertyFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags, r_raygenShaderBindingTable.buffer, r_raygenShaderBindingTable.memory);
+    _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags, r_missShaderBindingTable.buffer, r_missShaderBindingTable.memory);
+    _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags, r_hitShaderBindingTable.buffer, r_hitShaderBindingTable.memory);
+
+
+    vkMapMemory(_vulkanDevice->_device, r_raygenShaderBindingTable.memory, 0, VK_WHOLE_SIZE, 0, &r_raygenShaderBindingTable.mapped);
+    vkMapMemory(_vulkanDevice->_device, r_missShaderBindingTable.memory, 0, VK_WHOLE_SIZE, 0, &r_missShaderBindingTable.mapped);
+    vkMapMemory(_vulkanDevice->_device, r_hitShaderBindingTable.memory, 0, VK_WHOLE_SIZE, 0, &r_hitShaderBindingTable.mapped);
+    
+    memcpy(r_raygenShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * raygenShaderIndex, handleSize);
+    memcpy(r_missShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * missShaderIndex, handleSize);
+    memcpy(r_hitShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * hitShaderIndex, handleSize);
+}
+
 void AppBase::InitRayTracing() {
     CreateBLAS();
     CreateTRAS();

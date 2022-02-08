@@ -25,6 +25,7 @@
 #include "gui.h"
 #include "shader.h"
 #include "common.h"
+#include "tools.h"
 
 class AppBase
 {
@@ -57,6 +58,12 @@ public:
         glm::mat4 viewInverse;
         glm::mat4 projInverse;
     }_uniformData;
+
+    enum ShaderGroups {
+        raygenShaderIndex = 0,
+        missShaderIndex = 1,
+        hitShaderIndex = 2
+    };
 
     /**
     * @brief    コンストラクタ
@@ -228,6 +235,16 @@ public:
     void CreateRaytracingPipeline();
 
     /**
+    * @brief    レイトレーシング用パイプラインプロパティを取得する
+    */
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR GetRayTracingPipelineProperties();
+
+    /**
+    * @brief    シェーダーのバインディングテーブルを作成する
+    */
+    void CreateShaderBindingTable();
+
+    /**
     * @brief    レイトレーシング初期化
     */
     void InitRayTracing();
@@ -298,7 +315,6 @@ public:
     VkPhysicalDevice _physicalDevice;
     VkDebugUtilsMessengerEXT _debugMessenger;
     VkRenderPass _renderPass;
-    VkPipelineLayout r_pipelineLayout;
     VkPipeline _pipeline;
     std::vector<VkFramebuffer> _frameBuffers;
 
@@ -335,6 +351,9 @@ public:
     Initializers::Buffer r_transformBufferBLAS;
     Initializers::Buffer r_instanceBuffer;
     Initializers::Buffer r_ubo;
+    Initializers::Buffer r_raygenShaderBindingTable;
+    Initializers::Buffer r_missShaderBindingTable;
+    Initializers::Buffer r_hitShaderBindingTable;
 
     AccelerationStructure r_bottomLevelAS;
     AccelerationStructure r_topLevelAS;

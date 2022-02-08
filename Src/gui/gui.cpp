@@ -255,19 +255,9 @@ void Gui::CreateGraphicsPipeline(VkRenderPass& renderPass) {
         throw std::runtime_error("failed to create pipeline layout!");
     }
 
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = _shaderModules.vert.handle;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = _shaderModules.frag.handle;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+    shaderStages.push_back(_shader->LoadShaderProgram("Shaders/ui.vert.spv", VK_SHADER_STAGE_VERTEX_BIT));
+    shaderStages.push_back(_shader->LoadShaderProgram("Shaders/ui.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT));
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -347,16 +337,13 @@ void Gui::CreateGraphicsPipeline(VkRenderPass& renderPass) {
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pDynamicState = &dynamicStateCreateInfo;
     pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pStages = shaderStages.data();
     pipelineInfo.subpass = 0;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
 
     if (vkCreateGraphicsPipelines(_vulkanDevice->_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) != VK_SUCCESS) {
         throw std::runtime_error("failed to create graphics pipeline!");
     }
-
-    vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.vert.handle, nullptr);
-    vkDestroyShaderModule(_vulkanDevice->_device, _shaderModules.frag.handle, nullptr);
 }
 
 void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool, VkRenderPass& renderPass) {
@@ -381,16 +368,14 @@ void Gui::PrepareUI(VkInstance& instance, VkCommandPool& commandPool, VkRenderPa
     style.Colors[ImGuiCol_ButtonActive] = ImVec4(1.0f, 0.0f, 0.0f, 0.8f);
     ImGuiIO& io = ImGui::GetIO();
     io.FontGlobalScale = 1.0f;
-
-    _shader = new Shader();
-    _shader->Connect(_vulkanDevice);
-    _shaderModules = _shader->LoadShaderPrograms("Shaders/ui.vert.spv", "Shaders/ui.frag.spv");
     
     PrepareImage();
     CreateImageView();
     CreateSampler();
-
     CreateDescriptorSet();
+
+    _shader = new Shader();
+    _shader->Connect(_vulkanDevice);
     CreateGraphicsPipeline(renderPass);
 }
 
