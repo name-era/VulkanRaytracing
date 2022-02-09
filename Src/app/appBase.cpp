@@ -1799,7 +1799,7 @@ void AppBase::CreateBLAS() {
     geometryInfo.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
     geometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     geometryInfo.geometry.triangles.vertexData = vertexBufferDeviceAddress;
-    geometryInfo.geometry.triangles.maxVertex = tri.size();
+    geometryInfo.geometry.triangles.maxVertex = static_cast<uint32_t>(tri.size());
     geometryInfo.geometry.triangles.vertexStride = sizeof(Vertex);
     geometryInfo.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
     geometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
@@ -2119,9 +2119,9 @@ void AppBase::CreateRaytracingPipeline() {
     //パイプラインの生成
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo{};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
-    pipelineCreateInfo.stageCount = stages.size();
+    pipelineCreateInfo.stageCount = static_cast<uint32_t>(stages.size());
     pipelineCreateInfo.pStages = stages.data();
-    pipelineCreateInfo.groupCount = r_shaderGroups.size();
+    pipelineCreateInfo.groupCount = static_cast<uint32_t>(r_shaderGroups.size());
     pipelineCreateInfo.pGroups = r_shaderGroups.data();
     pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
     pipelineCreateInfo.layout = r_pipelineLayout;
@@ -2149,11 +2149,11 @@ void AppBase::CreateShaderBindingTable() {
     const uint32_t handleSize = raytracingPipelineProperties.shaderGroupHandleSize;
     const uint32_t handleAligned = raytracingPipelineProperties.shaderGroupHandleAlignment;
     const uint32_t handleSizeAligned = tools::GetAlinedSize(handleSize, handleAligned);
-    const uint32_t shaderGroupSize = r_shaderGroups.size() * handleAligned;
+    const uint32_t shaderGroupSize = static_cast<uint32_t>(r_shaderGroups.size()) * handleAligned;
 
     //シェーダーグループのハンドルを取得する
     std::vector<uint8_t> shaderHandleStorage(shaderGroupSize);
-    vkGetRayTracingShaderGroupHandlesKHR(_vulkanDevice->_device, r_pipeline, 0, r_shaderGroups.size(), shaderGroupSize, shaderHandleStorage.data());
+    vkGetRayTracingShaderGroupHandlesKHR(_vulkanDevice->_device, r_pipeline, 0, static_cast<uint32_t>(r_shaderGroups.size()), shaderGroupSize, shaderHandleStorage.data());
 
     const VkBufferUsageFlags bufferUsageFlags = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     const VkMemoryPropertyFlags propertyFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
@@ -2249,7 +2249,7 @@ void AppBase::CreateDescriptorSets() {
     writeDescriptorSet[1].descriptorCount = 1;
     writeDescriptorSet[1].pBufferInfo = &bufferInfo;
 
-    vkUpdateDescriptorSets(_vulkanDevice->_device, writeDescriptorSet.size(), writeDescriptorSet.data(), 0, VK_NULL_HANDLE);
+    vkUpdateDescriptorSets(_vulkanDevice->_device, static_cast<uint32_t>(writeDescriptorSet.size()), writeDescriptorSet.data(), 0, VK_NULL_HANDLE);
 
 }
 
