@@ -6,4 +6,6 @@ namespace tools
 	{
 		return (value + alignment - 1) & ~(alignment - 1);
 	}
+
+
 }

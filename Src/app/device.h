@@ -71,9 +71,14 @@ struct VulkanDevice {
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
     /**
-    * @brief    イメージレイアウトの作成
+    * @brief    イメージレイアウトの作成を単一コマンドバッファに記録する
     */
     void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
+    
+    /**
+    * @brief    イメージレイアウトの作成
+    */
+    void SetImageRayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
 
     /**
     * @brief    コマンドバッファの記録開始

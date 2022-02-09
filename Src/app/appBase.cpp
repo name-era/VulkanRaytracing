@@ -1530,7 +1530,50 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             WIDTH, HEIGHT, 1
         );
 
-        //レイトレーシングの結果をバックバッファに
+        //レイトレーシングの結果をバックバッファにコピーする
+
+        //スワップチェーンイメージを転送dstに設定
+        _vulkanDevice->SetImageRayout(
+            _commandBuffers[i],
+            _swapchain->_swapchainBuffers[i].image,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1
+        );
+
+        //レイトレーシング結果イメージを転送srcに設定
+        _vulkanDevice->SetImageRayout(
+            _commandBuffers[i],
+            r_strageImage.image,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            1
+        );
+
+        VkImageCopy copyRegion{};
+        copyRegion.extent = { WIDTH,HEIGHT,1 };
+        copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
+        copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
+
+        vkCmdCopyImage(_commandBuffers[i], r_strageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, _swapchain->_swapchainBuffers[i].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+        //レイアウトを元に戻す
+
+        _vulkanDevice->SetImageRayout(
+            _commandBuffers[i],
+            _swapchain->_swapchainBuffers[i].image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            1
+        );
+
+        _vulkanDevice->SetImageRayout(
+            _commandBuffers[i],
+            r_strageImage.image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            VK_IMAGE_LAYOUT_GENERAL,
+            1
+        );
 
         //glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
         if (renderImgui) {
