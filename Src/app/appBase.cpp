@@ -338,7 +338,7 @@ void glTF::Texture::PrepareImage(void* buffer, VkDeviceSize bufferSize, VkFormat
     vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
     void* data;
-    vkMapMemory(vulkanDevice->_device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    vkMapMemory(vulkanDevice->_device, stagingBufferMemory, 0, VK_WHOLE_SIZE, 0, &data);
     memcpy(data, buffer, bufferSize);
     vkUnmapMemory(vulkanDevice->_device, stagingBufferMemory);
 
@@ -623,7 +623,7 @@ void glTF::LoadFromFile(std::string filename) {
     _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vertexStaging.buffer, vertexStaging.memory);
 
     void* data;
-    vkMapMemory(_vulkanDevice->_device, vertexStaging.memory, 0, vertexBufferSize, 0, &data);
+    vkMapMemory(_vulkanDevice->_device, vertexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
     memcpy(data, vertexBuffer.data(), (size_t)vertexBufferSize);
     vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
 
@@ -642,7 +642,7 @@ void glTF::LoadFromFile(std::string filename) {
 
     _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, indexStaging.buffer, indexStaging.memory);
 
-    vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, indexBufferSize, 0, &data);
+    vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
     memcpy(data, indexBuffer.data(), (size_t)indexBufferSize);
     vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
 
@@ -657,7 +657,7 @@ void glTF::LoadFromFile(std::string filename) {
     VkDeviceSize bufferSize = sizeof(UniformBlock);
     _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _uniformBuffer.buffer, _uniformBuffer.memory);
 
-    vkMapMemory(_vulkanDevice->_device, _uniformBuffer.memory, 0, sizeof(_ubo), 0, &_uniformBuffer.mapped);
+    vkMapMemory(_vulkanDevice->_device, _uniformBuffer.memory, 0, VK_WHOLE_SIZE, 0, &_uniformBuffer.mapped);
     memcpy(_uniformBuffer.mapped, &_ubo, sizeof(_ubo));
     vkUnmapMemory(_vulkanDevice->_device, _uniformBuffer.memory);
 }
@@ -1634,7 +1634,14 @@ void AppBase::Initialize() {
     //_shader = new Shader();
     //_shader->Connect(_vulkanDevice);
     //CreateGraphicsPipeline();
-
+    
+    load_VK_EXTENSIONS(
+        _instance,
+        vkGetInstanceProcAddr,
+        _vulkanDevice->_device,
+        vkGetDeviceProcAddr
+    );
+    
     InitRayTracing();
 
     PrepareGUI();
@@ -1652,12 +1659,7 @@ void AppBase::Initialize() {
     _camera->setRotation(glm::vec3(0.0f, -135.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 256.0f);
 
-    load_VK_EXTENSIONS(
-        _instance,
-        vkGetInstanceProcAddr,
-        _vulkanDevice->_device,
-        vkGetDeviceProcAddr
-    );
+
 }
 
 /*******************************************************************************************************************
@@ -1755,8 +1757,8 @@ void AppBase::CreateBLAS() {
         r_vertexBufferBLAS.memory
     );
 
-    vkMapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory, 0, tri.size() * sizeof(Vertex), 0, &r_vertexBufferBLAS.mapped);
-    memcpy(r_vertexBufferBLAS.mapped, r_vertexBufferBLAS.buffer, tri.size() * sizeof(Vertex));
+    vkMapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory, 0, VK_WHOLE_SIZE, 0, &r_vertexBufferBLAS.mapped);
+    memcpy(r_vertexBufferBLAS.mapped, &tri[0], tri.size() * sizeof(Vertex));
     vkUnmapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory);
 
     _vulkanDevice->CreateBuffer(
@@ -1767,8 +1769,8 @@ void AppBase::CreateBLAS() {
         r_indexBufferBLAS.memory
     );
 
-    vkMapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory, 0, indices.size() * sizeof(uint32_t), 0, &r_indexBufferBLAS.mapped);
-    memcpy(r_indexBufferBLAS.mapped, r_indexBufferBLAS.buffer, indices.size() * sizeof(uint32_t));
+    vkMapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory, 0, VK_WHOLE_SIZE, 0, &r_indexBufferBLAS.mapped);
+    memcpy(r_indexBufferBLAS.mapped, &indices[0], indices.size() * sizeof(uint32_t));
     vkUnmapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory);
 
     _vulkanDevice->CreateBuffer(
@@ -1779,8 +1781,8 @@ void AppBase::CreateBLAS() {
         r_transformBufferBLAS.memory
     );
 
-    vkMapMemory(_vulkanDevice->_device, r_transformBufferBLAS.memory, 0, sizeof(VkTransformMatrixKHR), 0, &r_transformBufferBLAS.mapped);
-    memcpy(r_transformBufferBLAS.mapped, r_transformBufferBLAS.buffer, sizeof(VkTransformMatrixKHR));
+    vkMapMemory(_vulkanDevice->_device, r_transformBufferBLAS.memory, 0, VK_WHOLE_SIZE, 0, &r_transformBufferBLAS.mapped);
+    memcpy(r_transformBufferBLAS.mapped, &transformMatrix, sizeof(VkTransformMatrixKHR));
     vkUnmapMemory(_vulkanDevice->_device, r_transformBufferBLAS.memory);
 
     VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
@@ -1861,7 +1863,7 @@ void AppBase::CreateBLAS() {
     memoryBarrier.buffer = r_bottomLevelAS.buffer;
     memoryBarrier.size = VK_WHOLE_SIZE;
     memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    memoryBarrier.dstAccessMask = VK_QUEUE_FAMILY_IGNORED;
+    memoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
     memoryBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
     vkCmdPipelineBarrier(
@@ -1906,7 +1908,7 @@ void AppBase::CreateTRAS() {
         r_instanceBuffer.memory
     );
 
-    vkMapMemory(_vulkanDevice->_device, r_instanceBuffer.memory, 0, sizeof(VkAccelerationStructureInstanceKHR), 0, &r_instanceBuffer.mapped);
+    vkMapMemory(_vulkanDevice->_device, r_instanceBuffer.memory, 0, VK_WHOLE_SIZE, 0, &r_instanceBuffer.mapped);
     memcpy(r_instanceBuffer.mapped, &instance, sizeof(VkAccelerationStructureInstanceKHR));
     vkUnmapMemory(_vulkanDevice->_device, r_instanceBuffer.memory);
 
@@ -1976,7 +1978,7 @@ void AppBase::CreateTRAS() {
     memoryBarrier.buffer = r_topLevelAS.buffer;
     memoryBarrier.size = VK_WHOLE_SIZE;
     memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    memoryBarrier.dstAccessMask = VK_QUEUE_FAMILY_IGNORED;
+    memoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
     memoryBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
     vkCmdPipelineBarrier(
@@ -2022,7 +2024,7 @@ void AppBase::CreateUniformBuffer() {
     VkDeviceSize bufferSize = sizeof(UniformBlock);
     _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, r_ubo.buffer, r_ubo.memory);
 
-    vkMapMemory(_vulkanDevice->_device, r_ubo.memory, 0, sizeof(_uniformData), 0, &r_ubo.mapped);
+    vkMapMemory(_vulkanDevice->_device, r_ubo.memory, 0, VK_WHOLE_SIZE, 0, &r_ubo.mapped);
     memcpy(r_ubo.mapped, &r_ubo, sizeof(_uniformData));
     vkUnmapMemory(_vulkanDevice->_device, r_ubo.memory);
 
