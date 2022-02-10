@@ -13,7 +13,7 @@ void Swapchain::CreateSurface() {
     }
 }
 
-Swapchain::SwapChainSupportDetails Swapchain::QuerySwapChainSupport(VkPhysicalDevice device) {
+Swapchain::SwapChainSupportDetails Swapchain::QuerySwapChainSupport(VkPhysicalDevice device, uint32_t queueFamilyIndex) {
     SwapChainSupportDetails details;
 
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, _surface, &details.capabilities);
@@ -25,6 +25,9 @@ Swapchain::SwapChainSupportDetails Swapchain::QuerySwapChainSupport(VkPhysicalDe
         details.formats.resize(formatCount);
         vkGetPhysicalDeviceSurfaceFormatsKHR(device, _surface, &formatCount, details.formats.data());
     }
+
+    VkBool32 isSupport;
+    vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, queueFamilyIndex, _surface, &isSupport);
 
     uint32_t presentModeCount;
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, _surface, &presentModeCount, nullptr);
@@ -79,9 +82,9 @@ VkExtent2D Swapchain::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilit
     }
 }
 
-void Swapchain::CreateSwapChain() {
+void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
 
-    SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(_physicalDevice);
+    SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(_physicalDevice, queueFamilyIndex);
 
     VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.formats);
     VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.presentModes);
@@ -93,6 +96,7 @@ void Swapchain::CreateSwapChain() {
     }
 
     _minImageCount = swapChainSupport.capabilities.minImageCount;
+
 
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;

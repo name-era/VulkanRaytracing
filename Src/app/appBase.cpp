@@ -250,17 +250,6 @@ namespace {
     //シングルトン
     glTF* s_gltf = nullptr;
 
-    std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        //Vulkan Raytracing API で必要
-        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-        //VK_KHR_acceleration_structureで必要
-        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-        //descriptor indexing に必要
-        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
-    };
 }
 
 glTF::glTF() {
@@ -1051,8 +1040,10 @@ std::vector<const char*> AppBase::getRequiredExtensions() {
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
     std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     if (enableValidationLayers) {
+        extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
@@ -1079,7 +1070,7 @@ void AppBase::CreateInstance() {
     appInfo.pApplicationName = "Vulkan";
     appInfo.pEngineName = "Vulkan";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_2;
+    appInfo.apiVersion = VK_API_VERSION_1_1;
 
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -1618,10 +1609,17 @@ void AppBase::Initialize() {
     _vulkanDevice->Connect(_physicalDevice);
     _vulkanDevice->CreateLogicalDevice();
 
+    load_VK_EXTENSIONS(
+        _instance,
+        vkGetInstanceProcAddr,
+        _vulkanDevice->_device,
+        vkGetDeviceProcAddr
+    );
+
     _swapchain = new Swapchain();
     _swapchain->Connect(_window, _instance, _physicalDevice, _vulkanDevice->_device);
     _swapchain->CreateSurface();
-    _swapchain->CreateSwapChain();
+    _swapchain->CreateSwapChain(_vulkanDevice->FindQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT));
 
     CreateRenderPass();
     _vulkanDevice->CreateCommandPool();
@@ -1631,16 +1629,17 @@ void AppBase::Initialize() {
     //glTF::GetglTF()->Connect(_vulkanDevice);
     //glTF::GetglTF()->LoadFromFile("Assets/flightHelmet/FlightHelmet.gltf");
     //glTF::GetglTF()->CreateDescriptors();
-    //_shader = new Shader();
-    //_shader->Connect(_vulkanDevice);
+
     //CreateGraphicsPipeline();
     
-    load_VK_EXTENSIONS(
-        _instance,
-        vkGetInstanceProcAddr,
-        _vulkanDevice->_device,
-        vkGetDeviceProcAddr
-    );
+    _camera = new Camera();
+    _camera->type = Camera::CameraType::lookat;
+    _camera->flipY = true;
+    _camera->setPosition(glm::vec3(0.0f, -0.1f, -1.0f));
+    _camera->setRotation(glm::vec3(0.0f, -135.0f, 0.0f));
+    _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 256.0f);
+
+
     
     InitRayTracing();
 
@@ -1651,15 +1650,6 @@ void AppBase::Initialize() {
     CreateCommandBuffers();
     BuildCommandBuffers(false);
     CreateSyncObjects();
-
-    _camera = new Camera();
-    _camera->type = Camera::CameraType::lookat;
-    _camera->flipY = true;
-    _camera->setPosition(glm::vec3(0.0f, -0.1f, -1.0f));
-    _camera->setRotation(glm::vec3(0.0f, -135.0f, 0.0f));
-    _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 256.0f);
-
-
 }
 
 /*******************************************************************************************************************
@@ -1670,7 +1660,7 @@ uint64_t AppBase::GetBufferDeviceAddress(VkBuffer buffer) {
     VkBufferDeviceAddressInfo bufferDeviceInfo{};
     bufferDeviceInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
     bufferDeviceInfo.buffer = buffer;
-    return vkGetBufferDeviceAddress(_vulkanDevice->_device, &bufferDeviceInfo);
+    return vkGetBufferDeviceAddressKHR(_vulkanDevice->_device, &bufferDeviceInfo);
 }
 
 void AppBase::CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo) {
@@ -1885,7 +1875,7 @@ void AppBase::CreateBLAS() {
     vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
-void AppBase::CreateTRAS() {
+void AppBase::CreateTLAS() {
     VkTransformMatrixKHR transformMatrix = {
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,
@@ -2004,7 +1994,7 @@ void AppBase::CreateStrageImage() {
     
     CreateImage(
         WIDTH, HEIGHT, 1, SWAPCHAINCOLORFORMAT, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, r_strageImage.image, r_strageImage.memory
     );
 
@@ -2075,58 +2065,57 @@ void AppBase::CreateRaytracingPipeline() {
 
     std::vector<VkPipelineShaderStageCreateInfo> stages;
 
-    //シェーダーグループの作成
-    {
-        auto rgStage = _shader->LoadShaderProgram("Shaders/raytracing/raygen.rgen.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-        const int indexRaygen = 0;
-        VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
-        shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-        shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-        shaderGroup.generalShader = indexRaygen;
-        shaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
-        shaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
-        shaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
-        r_shaderGroups.push_back(shaderGroup);
-        stages.push_back(rgStage);
-    }
+    //create shader group
 
-    {
-        auto missStage = _shader->LoadShaderProgram("Shaders/raytracing/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
-        const int indexRaygen = 1;
-        VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
-        shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-        shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-        shaderGroup.generalShader = indexRaygen;
-        shaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
-        shaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
-        shaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
-        r_shaderGroups.push_back(shaderGroup);
-        stages.push_back(missStage);
-    }
+    //raygen
+    auto rgStage = _shader->LoadShaderProgram("Shaders/raytracing/raygen.rgen.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+    const int indexRaygen = 0;
+    VkRayTracingShaderGroupCreateInfoKHR raygenShaderGroup{};
+    raygenShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+    raygenShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+    raygenShaderGroup.generalShader = indexRaygen;
+    raygenShaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
+    raygenShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
+    raygenShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+    r_shaderGroups.push_back(raygenShaderGroup);
+    stages.push_back(rgStage);
+    
 
-    {
-        auto chStage = _shader->LoadShaderProgram("Shaders/raytracing/closesthit.rchit.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
-        const int indexRaygen = 2;
-        VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
-        shaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-        shaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
-        shaderGroup.generalShader = indexRaygen;
-        shaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
-        shaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
-        shaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
-        r_shaderGroups.push_back(shaderGroup);
-        stages.push_back(chStage);
-    }
+    //miss
+    auto missStage = _shader->LoadShaderProgram("Shaders/raytracing/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
+    VkRayTracingShaderGroupCreateInfoKHR missShaderGroup{};
+    missShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+    missShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+    missShaderGroup.generalShader = static_cast<uint32_t>(stages.size()) - 1;
+    missShaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
+    missShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
+    missShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+    r_shaderGroups.push_back(missShaderGroup);
+    stages.push_back(missStage);
+    
+
+    //closest hit
+    auto chStage = _shader->LoadShaderProgram("Shaders/raytracing/closesthit.rchit.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+    VkRayTracingShaderGroupCreateInfoKHR closesthitShaderGroup{};
+    closesthitShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+    closesthitShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+    closesthitShaderGroup.generalShader = VK_SHADER_UNUSED_KHR;
+    closesthitShaderGroup.closestHitShader = static_cast<uint32_t>(stages.size()) - 1;
+    closesthitShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
+    closesthitShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+    r_shaderGroups.push_back(closesthitShaderGroup);
+    stages.push_back(chStage);
+    
 
     //パイプラインの生成
-    VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo{};
-    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+    VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo{ VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR, nullptr };
     pipelineCreateInfo.stageCount = static_cast<uint32_t>(stages.size());
     pipelineCreateInfo.pStages = stages.data();
     pipelineCreateInfo.groupCount = static_cast<uint32_t>(r_shaderGroups.size());
     pipelineCreateInfo.pGroups = r_shaderGroups.data();
     pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
     pipelineCreateInfo.layout = r_pipelineLayout;
+
     vkCreateRayTracingPipelinesKHR(_vulkanDevice->_device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &r_pipeline);
 }
 
@@ -2257,10 +2246,12 @@ void AppBase::CreateDescriptorSets() {
 
 void AppBase::InitRayTracing() {
     CreateBLAS();
-    CreateTRAS();
+    CreateTLAS();
     CreateStrageImage();
     CreateUniformBuffer();
     CreateRaytracingLayout();
+    _shader = new Shader();
+    _shader->Connect(_vulkanDevice);
     CreateRaytracingPipeline();
     CreateShaderBindingTable();
     CreateDescriptorSets();
@@ -2285,7 +2276,7 @@ void AppBase::RecreateSwapChain() {
     vkDeviceWaitIdle(_vulkanDevice->_device);
 
     CleanupSwapchain();
-    _swapchain->CreateSwapChain();
+    _swapchain->CreateSwapChain(_vulkanDevice->FindQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT));
 
     CreateRenderPass();
     CreateGraphicsPipeline();

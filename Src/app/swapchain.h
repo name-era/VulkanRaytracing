@@ -41,7 +41,7 @@ public:
     /**
     * @brief    スワップチェーンのサポートを確認する
     */
-    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
+    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device, uint32_t queueFalimyIndex);
 
     /**
     * @brief    スワップチェーンのサーフェスフォーマットを選択する
@@ -61,7 +61,7 @@ public:
     /**
     * @brief    スワップチェーンを作成する
     */
-    void CreateSwapChain();
+    void CreateSwapChain(uint32_t queueFamilyIndex);
 
     /**
     * @brief    表示用

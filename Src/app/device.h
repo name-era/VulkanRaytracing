@@ -12,6 +12,7 @@
 
 #include "common.h"
 
+
 struct VulkanDevice {
 
     struct QueueFamily {

@@ -11,7 +11,6 @@
 #define GLFW_INCLUDE_VULKAN
 #include <glfw3.h>
 #include <vulkan/vulkan.h>
-#include <extensions_vk.hpp>
 
 #include <stdexcept>
 #include <vector>
@@ -176,7 +175,7 @@ public:
     void CreateSyncObjects();
 
     /**
-    * @brief    コールバックの初期化
+    * @brief    初期化
     */
     void Initialize();
 
@@ -207,7 +206,7 @@ public:
     /**
     * @brief    TRASを構築する
     */
-    void CreateTRAS();
+    void CreateTLAS();
 
     /**
     * @brief    Strage Imageを構築する

@@ -3,13 +3,20 @@
 namespace {
     std::vector<const char*> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+
+        VK_KHR_MAINTENANCE3_EXTENSION_NAME,
+        VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+
         //Vulkan Raytracing API で必要
         VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
         VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+
         //VK_KHR_acceleration_structureで必要
-        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-        //descriptor indexing に必要
-        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME
+        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME       
     };
 }
 
@@ -83,7 +90,6 @@ void VulkanDevice::CreateLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
@@ -94,21 +100,20 @@ void VulkanDevice::CreateLogicalDevice() {
     //PhysicalDeviceが備える各種機能を使うための準備
     //バッファのデバイスアドレスを有効にする
     VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bufferDeviceAddressF{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,nullptr
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES, nullptr
     };
     bufferDeviceAddressF.bufferDeviceAddress = VK_TRUE;
-    bufferDeviceAddressF.pNext = nullptr;
 
     //レイトレーシングパイプラインを使えるようにする
     VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingPipelineF{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,nullptr
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR, nullptr
     };
     rayTracingPipelineF.rayTracingPipeline = VK_TRUE;
     rayTracingPipelineF.pNext = &bufferDeviceAddressF;
 
     //Accelerationによるレイトレーシングを有効にする
     VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureF{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,nullptr
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, nullptr
     };
     accelerationStructureF.accelerationStructure = VK_TRUE;
     accelerationStructureF.pNext = &rayTracingPipelineF;
@@ -296,8 +301,8 @@ void VulkanDevice::TransitionImageLayout(VkImage image, VkImageLayout oldLayout,
     //barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
-    VkPipelineStageFlags sourceStage;
-    VkPipelineStageFlags destinationStage;
+    VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
     if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED) {
         barrier.srcAccessMask = 0;
