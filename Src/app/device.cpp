@@ -176,6 +176,7 @@ void VulkanDevice::CreateCommandPool() {
 
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = _queueFamilyIndices.graphics;
 
     if (vkCreateCommandPool(_device, &poolInfo, nullptr, &_commandPool) != VK_SUCCESS) {
@@ -363,18 +364,19 @@ void VulkanDevice::SetImageRayout(VkCommandBuffer commandBuffer, VkImage image, 
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
-    VkPipelineStageFlags sourceStage;
-    VkPipelineStageFlags destinationStage;
+    VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
-    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED) {
+    switch (oldLayout) {
+    case VK_IMAGE_LAYOUT_UNDEFINED:
         barrier.srcAccessMask = 0;
-    }
-    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+    
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    }
-    else {
-        throw std::invalid_argument("unsupported layout transition!");
+        break;
+    default:
+        break;
     }
 
     switch (newLayout) {
@@ -390,6 +392,8 @@ void VulkanDevice::SetImageRayout(VkCommandBuffer commandBuffer, VkImage image, 
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
         destinationStage = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+        break;
+    default:
         break;
     }
 

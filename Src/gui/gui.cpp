@@ -124,7 +124,7 @@ void Gui::PrepareImage() {
     void* data;
     vkMapMemory(_vulkanDevice->_device, stagingBuffer.memory, 0, uploadSize, 0, &data);
     memcpy(data, fontData, uploadSize);
-    stagingBuffer.flush(_vulkanDevice->_device, uploadSize);
+    stagingBuffer.Flush(_vulkanDevice->_device, uploadSize);
     vkUnmapMemory(_vulkanDevice->_device, stagingBuffer.memory);
 
     CreateImage(texWidth, texHeight, _fontImage.image, _fontImage.memory);
@@ -425,8 +425,8 @@ bool Gui::UpdateBuffers() {
         idxDst += cmd_list->IdxBuffer.Size;
     }
 
-    _vertexBuffer.flush(_vulkanDevice->_device, VK_WHOLE_SIZE);
-    _indexBuffer.flush(_vulkanDevice->_device, VK_WHOLE_SIZE);
+    _vertexBuffer.Flush(_vulkanDevice->_device, VK_WHOLE_SIZE);
+    _indexBuffer.Flush(_vulkanDevice->_device, VK_WHOLE_SIZE);
 
     vkUnmapMemory(_vulkanDevice->_device, _vertexBuffer.memory);
     vkUnmapMemory(_vulkanDevice->_device, _indexBuffer.memory);

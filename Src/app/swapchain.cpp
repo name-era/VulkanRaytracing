@@ -107,7 +107,7 @@ void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
     createInfo.imageColorSpace = surfaceFormat.colorSpace;
     createInfo.imageExtent = _extent;
     createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     createInfo.queueFamilyIndexCount = 0;
     createInfo.preTransform = swapChainSupport.capabilities.currentTransform;

@@ -24,7 +24,7 @@ namespace Initializers {
 		int count;
 		void* mapped;
 
-		void flush(VkDevice& device, size_t uploadSize)
+		void Flush(VkDevice& device, size_t uploadSize)
 		{
 			VkMappedMemoryRange mappedRange = {};
 			mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
@@ -32,6 +32,11 @@ namespace Initializers {
 			mappedRange.offset = 0;
 			mappedRange.size = uploadSize;
 			vkFlushMappedMemoryRanges(device, 1, &mappedRange);
+		}
+
+		void Destroy(VkDevice& device) {
+			vkDestroyBuffer(device, buffer, nullptr);
+			vkFreeMemory(device, memory, nullptr);
 		}
 	};
 	

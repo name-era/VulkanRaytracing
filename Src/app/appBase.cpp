@@ -1490,18 +1490,6 @@ void AppBase::CreateCommandBuffers() {
 
 void AppBase::BuildCommandBuffers(bool renderImgui) {
 
-    _commandBuffers.resize(_swapchain->_imageCount);
-
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = _vulkanDevice->_commandPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)_commandBuffers.size();
-
-    if (vkAllocateCommandBuffers(_vulkanDevice->_device, &allocInfo, _commandBuffers.data()) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate command buffers!");
-    }
-
     //コマンドバッファへの記録の開始
     for (size_t i = 0; i < _commandBuffers.size(); i++) {
         VkCommandBufferBeginInfo beginInfo{};
@@ -1525,7 +1513,7 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
 
-        vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        //vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         //レイトレーシングを行う
         vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
@@ -1584,11 +1572,11 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
 
         //glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
         if (renderImgui) {
-            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
+            //ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
         }
         //_gui->DrawUI(_commandBuffers[i]);
         
-        vkCmdEndRenderPass(_commandBuffers[i]);
+        //vkCmdEndRenderPass(_commandBuffers[i]);
 
         if (vkEndCommandBuffer(_commandBuffers[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to record command buffer!");
@@ -1651,9 +1639,10 @@ void AppBase::Initialize() {
     _camera = new Camera();
     _camera->type = Camera::CameraType::lookat;
     _camera->flipY = true;
-    _camera->setPosition(glm::vec3(0.0f, -0.1f, -1.0f));
-    _camera->setRotation(glm::vec3(0.0f, -135.0f, 0.0f));
-    _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 256.0f);
+    //_camera->setPosition(glm::vec3(0.0f, -0.1f, -1.0f));
+    _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
+    _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 512.0f);
+    _camera->setTranslation(glm::vec3(0.0f, 0.0f, -2.5f));
 
 
     
@@ -1702,7 +1691,7 @@ void AppBase::CreateAccelerationStructureBuffer(AccelerationStructure& accelerat
     vkBindBufferMemory(_vulkanDevice->_device, accelerationStructure.buffer, accelerationStructure.memory, 0);
 }
 
-AppBase::RayTracingScratchBuffer AppBase::CreateScrachBuffer(VkDeviceSize size) {
+AppBase::RayTracingScratchBuffer AppBase::CreateScratchBuffer(VkDeviceSize size) {
     
     RayTracingScratchBuffer scratchBuffer{};
 
@@ -1845,7 +1834,7 @@ void AppBase::CreateBLAS() {
     vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &createInfo, nullptr, &r_bottomLevelAS.handle);
 
     //BLASの構築に必要なスクラッチ（作業）バッファの作成
-    RayTracingScratchBuffer scratchBuffer = CreateScrachBuffer(buildSizesInfo.buildScratchSize);
+    RayTracingScratchBuffer scratchBuffer = CreateScratchBuffer(buildSizesInfo.buildScratchSize);
 
     //VkAccelerationStructureBuildGeometryInfoKHRの他のパラメータ
     buildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
@@ -1960,7 +1949,7 @@ void AppBase::CreateTLAS() {
     vkCreateAccelerationStructureKHR(_vulkanDevice->_device, &createInfo, nullptr, &r_topLevelAS.handle);
     
     //TLASの構築に必要なスクラッチ（作業）バッファの作成
-    RayTracingScratchBuffer scratchBuffer = CreateScrachBuffer(buildSizesInfo.buildScratchSize);
+    RayTracingScratchBuffer scratchBuffer = CreateScratchBuffer(buildSizesInfo.buildScratchSize);
 
     //VkAccelerationStructureBuildGeometryInfoKHRの他のパラメータ
     buildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
@@ -2013,8 +2002,7 @@ void AppBase::CreateStrageImage() {
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, r_strageImage.image, r_strageImage.memory
     );
-
-    CreateImageView(r_strageImage.image, SWAPCHAINCOLORFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    r_strageImage.view = CreateImageView(r_strageImage.image, SWAPCHAINCOLORFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     
     _vulkanDevice->TransitionImageLayout(r_strageImage.image, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,1);
 
@@ -2032,7 +2020,6 @@ void AppBase::CreateUniformBuffer() {
 
     vkMapMemory(_vulkanDevice->_device, r_ubo.memory, 0, VK_WHOLE_SIZE, 0, &r_ubo.mapped);
     memcpy(r_ubo.mapped, &r_ubo, sizeof(_uniformData));
-    vkUnmapMemory(_vulkanDevice->_device, r_ubo.memory);
 
     UpdateUniformBuffer();
 }
@@ -2130,14 +2117,17 @@ void AppBase::CreateRaytracingPipeline() {
     pipelineCreateInfo.layout = r_pipelineLayout;
 
     vkCreateRayTracingPipelinesKHR(_vulkanDevice->_device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &r_pipeline);
+    for (auto stage : stages) {
+        vkDestroyShaderModule(_vulkanDevice->_device, stage.module, nullptr);
+    }
 }
 
 VkPhysicalDeviceRayTracingPipelinePropertiesKHR AppBase::GetRayTracingPipelineProperties() {
 
-    VkPhysicalDeviceRayTracingPipelinePropertiesKHR pipelineProperties;
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR pipelineProperties{};
     pipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
 
-    VkPhysicalDeviceProperties2 deviceProperties;
+    VkPhysicalDeviceProperties2 deviceProperties{};
     deviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     deviceProperties.pNext = &pipelineProperties;
 
@@ -2189,17 +2179,6 @@ void AppBase::CreateShaderBindingTable() {
 
 void AppBase::CreateDescriptorSets() {
     
-    //create descriptorSet
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = _descriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &r_descriptorSetLayout;
-
-    if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &r_descriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate descriptor sets!");
-    }
-
     //create descriptorPool
     std::vector<VkDescriptorPoolSize> poolSizes = {
         { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR , 1 },
@@ -2215,6 +2194,17 @@ void AppBase::CreateDescriptorSets() {
 
     if (vkCreateDescriptorPool(_vulkanDevice->_device, &poolInfo, nullptr, &r_descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("failed to create descriptor pool!");
+    }
+
+    //create descriptorSet
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = r_descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &r_descriptorSetLayout;
+
+    if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &r_descriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate descriptor sets!");
     }
 
     //update descriptorSet
@@ -2247,11 +2237,12 @@ void AppBase::CreateDescriptorSets() {
     bufferInfo.offset = 0;
     bufferInfo.range = sizeof(UniformBlock);
 
-    writeDescriptorSet[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet[1].dstSet = r_descriptorSet;
-    writeDescriptorSet[1].dstBinding = 2;
-    writeDescriptorSet[1].descriptorCount = 1;
-    writeDescriptorSet[1].pBufferInfo = &bufferInfo;
+    writeDescriptorSet[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet[2].dstSet = r_descriptorSet;
+    writeDescriptorSet[2].dstBinding = 2;
+    writeDescriptorSet[2].descriptorCount = 1;
+    writeDescriptorSet[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writeDescriptorSet[2].pBufferInfo = &bufferInfo;
 
     vkUpdateDescriptorSets(_vulkanDevice->_device, static_cast<uint32_t>(writeDescriptorSet.size()), writeDescriptorSet.data(), 0, VK_NULL_HANDLE);
 
@@ -2458,7 +2449,8 @@ void AppBase::Run() {
 
         glfwPollEvents();
         drawFrame();
-        glTF::GetglTF()->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
+        UpdateUniformBuffer();
+        //glTF::GetglTF()->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
         
         auto tEnd = std::chrono::high_resolution_clock::now();
         auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
@@ -2490,17 +2482,43 @@ void AppBase::CleanupSwapchain() {
 
     vkFreeCommandBuffers(_vulkanDevice->_device, _vulkanDevice->_commandPool, (uint32_t)_commandBuffers.size(), _commandBuffers.data());
 
-    vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
-    vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
+    //vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
+    //vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
-    glTF::GetglTF()->Cleanup();
+    //glTF::GetglTF()->Cleanup();
 }
 
 void AppBase::Destroy() {
 
     CleanupSwapchain();
     
-    glTF::GetglTF()->Destroy();
+
+    //raytracing
+    r_vertexBufferBLAS.Destroy(_vulkanDevice->_device);
+    r_indexBufferBLAS.Destroy(_vulkanDevice->_device);
+    r_transformBufferBLAS.Destroy(_vulkanDevice->_device);
+    r_instanceBuffer.Destroy(_vulkanDevice->_device);
+    r_ubo.Destroy(_vulkanDevice->_device);
+    r_raygenShaderBindingTable.Destroy(_vulkanDevice->_device);
+    r_missShaderBindingTable.Destroy(_vulkanDevice->_device);
+    r_hitShaderBindingTable.Destroy(_vulkanDevice->_device);
+
+    vkDestroyBuffer(_vulkanDevice->_device, r_bottomLevelAS.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, r_bottomLevelAS.memory, nullptr);
+    vkDestroyAccelerationStructureKHR(_vulkanDevice->_device, r_bottomLevelAS.handle, nullptr);
+    vkDestroyBuffer(_vulkanDevice->_device, r_topLevelAS.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, r_topLevelAS.memory, nullptr);
+    vkDestroyAccelerationStructureKHR(_vulkanDevice->_device, r_topLevelAS.handle, nullptr);
+
+    r_strageImage.Destroy(_vulkanDevice->_device);
+
+    vkDestroyDescriptorSetLayout(_vulkanDevice->_device, r_descriptorSetLayout, nullptr);
+    vkDestroyDescriptorPool(_vulkanDevice->_device, r_descriptorPool, nullptr);
+
+    vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
+    vkDestroyPipeline(_vulkanDevice->_device, r_pipeline, nullptr);
+
+    //glTF::GetglTF()->Destroy();
     vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
     ImGui_ImplVulkan_Shutdown();
 
@@ -2520,6 +2538,6 @@ void AppBase::Destroy() {
     delete _vulkanDevice;
     delete _swapchain;
     delete _shader;
-    delete glTF::GetglTF();
+    //delete glTF::GetglTF();
     delete _camera;
 }

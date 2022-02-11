@@ -51,6 +51,12 @@ public:
         VkImage image;
         VkDeviceMemory memory;
         VkImageView view;
+        void Destroy(VkDevice device){
+            vkDestroyImage(device, image, nullptr);
+            vkDestroyImageView(device, view, nullptr);
+            vkFreeMemory(device, memory, nullptr);
+        }
+
     };
 
     struct UniformBlock {
@@ -196,7 +202,7 @@ public:
     /**
     * @brief    スクラッチバッファの作成
     */
-    RayTracingScratchBuffer CreateScrachBuffer(VkDeviceSize size);
+    RayTracingScratchBuffer CreateScratchBuffer(VkDeviceSize size);
 
     /**
     * @brief    BLASを構築する
