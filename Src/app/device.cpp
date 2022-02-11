@@ -97,6 +97,7 @@ void VulkanDevice::CreateLogicalDevice() {
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
+
     //PhysicalDeviceが備える各種機能を使うための準備
     //バッファのデバイスアドレスを有効にする
     VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bufferDeviceAddressF{
@@ -118,23 +119,22 @@ void VulkanDevice::CreateLogicalDevice() {
     accelerationStructureF.accelerationStructure = VK_TRUE;
     accelerationStructureF.pNext = &rayTracingPipelineF;
 
-    //ディスクリプタ配列を使えるようにする
-    VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingF{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES
-    };
-    descriptorIndexingF.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
-    descriptorIndexingF.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-    descriptorIndexingF.runtimeDescriptorArray = VK_TRUE;
-    descriptorIndexingF.descriptorBindingVariableDescriptorCount = VK_TRUE;
-    descriptorIndexingF.descriptorBindingPartiallyBound = VK_TRUE;
-    descriptorIndexingF.pNext = &accelerationStructureF;
-
-    VkPhysicalDeviceFeatures features{};
-    vkGetPhysicalDeviceFeatures(_physicalDevice, &features);
     VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
     physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    physicalDeviceFeatures2.features = features;
-    physicalDeviceFeatures2.pNext = &descriptorIndexingF;
+    physicalDeviceFeatures2.pNext = &accelerationStructureF;
+    vkGetPhysicalDeviceFeatures2(_physicalDevice, &physicalDeviceFeatures2);
+
+
+    //ディスクリプタ配列を使えるようにする
+    //VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingF{
+    //    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES
+    //};
+    //descriptorIndexingF.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
+    //descriptorIndexingF.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    //descriptorIndexingF.runtimeDescriptorArray = VK_TRUE;
+    //descriptorIndexingF.descriptorBindingVariableDescriptorCount = VK_TRUE;
+    //descriptorIndexingF.descriptorBindingPartiallyBound = VK_TRUE;
+    //descriptorIndexingF.pNext = &accelerationStructureF;
 
     createInfo.pNext = &physicalDeviceFeatures2;
     createInfo.pEnabledFeatures = nullptr;

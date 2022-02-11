@@ -971,7 +971,23 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
+    std::string prefix("");
+
+    if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+        prefix = "VERBOSE";
+    }
+    else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+        prefix = "INFO";
+    }
+    else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        prefix = "WARNING";
+    }
+    else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        prefix = "ERROR";
+    }
+
+    std::cerr << "validation layer: " << prefix << "[" << pCallbackData->messageIdNumber << "][" << pCallbackData->pMessageIdName << "]:" << pCallbackData->pMessage << std::endl;
 
     return VK_FALSE;
 }
@@ -1070,7 +1086,7 @@ void AppBase::CreateInstance() {
     appInfo.pApplicationName = "Vulkan";
     appInfo.pEngineName = "Vulkan";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_1;
+    appInfo.apiVersion = VK_API_VERSION_1_2;
 
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -2065,15 +2081,12 @@ void AppBase::CreateRaytracingPipeline() {
 
     std::vector<VkPipelineShaderStageCreateInfo> stages;
 
-    //create shader group
-
     //raygen
     auto rgStage = _shader->LoadShaderProgram("Shaders/raytracing/raygen.rgen.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-    const int indexRaygen = 0;
     VkRayTracingShaderGroupCreateInfoKHR raygenShaderGroup{};
     raygenShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     raygenShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-    raygenShaderGroup.generalShader = indexRaygen;
+    raygenShaderGroup.generalShader = static_cast<uint32_t>(stages.size());
     raygenShaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
     raygenShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
     raygenShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
@@ -2086,7 +2099,7 @@ void AppBase::CreateRaytracingPipeline() {
     VkRayTracingShaderGroupCreateInfoKHR missShaderGroup{};
     missShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     missShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-    missShaderGroup.generalShader = static_cast<uint32_t>(stages.size()) - 1;
+    missShaderGroup.generalShader = static_cast<uint32_t>(stages.size());
     missShaderGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
     missShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
     missShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
@@ -2100,15 +2113,15 @@ void AppBase::CreateRaytracingPipeline() {
     closesthitShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     closesthitShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
     closesthitShaderGroup.generalShader = VK_SHADER_UNUSED_KHR;
-    closesthitShaderGroup.closestHitShader = static_cast<uint32_t>(stages.size()) - 1;
+    closesthitShaderGroup.closestHitShader = static_cast<uint32_t>(stages.size());
     closesthitShaderGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
     closesthitShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
     r_shaderGroups.push_back(closesthitShaderGroup);
     stages.push_back(chStage);
     
-
     //パイプラインの生成
-    VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo{ VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR, nullptr };
+    VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo{};
+    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
     pipelineCreateInfo.stageCount = static_cast<uint32_t>(stages.size());
     pipelineCreateInfo.pStages = stages.data();
     pipelineCreateInfo.groupCount = static_cast<uint32_t>(r_shaderGroups.size());

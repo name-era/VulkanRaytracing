@@ -76,7 +76,7 @@ VkPipelineShaderStageCreateInfo Shader::LoadShaderProgram(std::string shaderFile
     auto shaderCode = ReadFile(shaderFileName);
     VkShaderModule shaderModule = CreateShaderModule(shaderCode);
 
-    VkPipelineShaderStageCreateInfo shaderStage;
+    VkPipelineShaderStageCreateInfo shaderStage = {};
     shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shaderStage.stage = stage;
     shaderStage.module = shaderModule;
