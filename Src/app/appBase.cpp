@@ -1638,8 +1638,7 @@ void AppBase::Initialize() {
     
     _camera = new Camera();
     _camera->type = Camera::CameraType::lookat;
-    _camera->flipY = true;
-    //_camera->setPosition(glm::vec3(0.0f, -0.1f, -1.0f));
+    //_camera->flipY = true;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 512.0f);
     _camera->setTranslation(glm::vec3(0.0f, 0.0f, -2.5f));
@@ -1731,9 +1730,9 @@ void AppBase::CreateBLAS() {
     };
 
     std::vector<Vertex> tri = {
-        {1.0f, 1.0f, 0.0f},
-        {-1.0f, 1.0f, 0.0f},
-        {0.0f, -1.0f, 0.0f}
+        {{1.0f, 1.0f, 0.0f}},
+        {{-1.0f, 1.0f, 0.0f}},
+        {{0.0f, -1.0f, 0.0f}}
     };
 
     VkTransformMatrixKHR transformMatrix = {
@@ -1753,7 +1752,7 @@ void AppBase::CreateBLAS() {
     );
 
     vkMapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory, 0, VK_WHOLE_SIZE, 0, &r_vertexBufferBLAS.mapped);
-    memcpy(r_vertexBufferBLAS.mapped, &tri[0], tri.size() * sizeof(Vertex));
+    memcpy(r_vertexBufferBLAS.mapped, tri.data(), tri.size() * sizeof(Vertex));
     vkUnmapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory);
 
     _vulkanDevice->CreateBuffer(
@@ -1765,7 +1764,7 @@ void AppBase::CreateBLAS() {
     );
 
     vkMapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory, 0, VK_WHOLE_SIZE, 0, &r_indexBufferBLAS.mapped);
-    memcpy(r_indexBufferBLAS.mapped, &indices[0], indices.size() * sizeof(uint32_t));
+    memcpy(r_indexBufferBLAS.mapped, indices.data(), indices.size() * sizeof(uint32_t));
     vkUnmapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory);
 
     _vulkanDevice->CreateBuffer(
@@ -1893,7 +1892,7 @@ void AppBase::CreateTLAS() {
     instance.mask = 0xFF;
     instance.instanceShaderBindingTableRecordOffset = 0;
     instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-    instance.accelerationStructureReference = r_topLevelAS.deviceAddress;
+    instance.accelerationStructureReference = r_bottomLevelAS.deviceAddress;
     
     _vulkanDevice->CreateBuffer(
         sizeof(VkAccelerationStructureInstanceKHR),
