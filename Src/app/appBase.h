@@ -352,7 +352,7 @@ public:
 
     glm::vec2 _mousePos;
     bool viewUpdated = false;
-    float frameTimer = 0.0f;
+    float timer = 0.0f;
     Initializers::MouseButtons _mouseButtons;
     bool _framebufferResized;
     

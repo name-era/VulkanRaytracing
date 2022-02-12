@@ -9,7 +9,6 @@ struct RayPayload {
 };
 layout(location = 0) rayPayloadInEXT RayPayload rayPayload;
 
-layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 2) uniform UBO {
     mat4 viewInverse;
     mat4 projInverse;

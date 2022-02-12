@@ -652,8 +652,6 @@ void glTF::LoadFromFile(std::string filename) {
     vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
 
-
-
     //index buffer
     VkDeviceSize indexBufferSize = indexBuffer.size() * sizeof(uint32_t);
     _indices.count = static_cast<uint32_t>(indexBuffer.size());
@@ -1369,7 +1367,7 @@ void AppBase::CreateGraphicsPipeline() {
     }
 }
 
-void AppBase::PrepareGUI() {
+void AppBase::InitializeGUI() {
     
     VkDescriptorPoolSize pool_sizes[] =
     {
@@ -1540,22 +1538,6 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = _renderPass;
-        renderPassInfo.framebuffer = _frameBuffers[i];
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = _swapchain->_extent;
-
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.0f, 0.f, 0.f, 1.0f} };
-        clearValues[1].depthStencil = { 1.0f, 0 };
-
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        //vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
         //レイトレーシングを行う
         vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
         vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, 0, nullptr);
@@ -1611,13 +1593,27 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             1
         );
 
-        //glTF::GetglTF()->Draw(_commandBuffers[i], _pipelineLayout);
+                VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = _renderPass;
+        renderPassInfo.framebuffer = _frameBuffers[i];
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = _swapchain->_extent;
+
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = { {0.0f, 0.f, 0.f, 1.0f} };
+        clearValues[1].depthStencil = { 1.0f, 0 };
+
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        vkCmdBeginRenderPass(_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
         if (renderImgui) {
-            //ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
         }
-        //_gui->DrawUI(_commandBuffers[i]);
         
-        //vkCmdEndRenderPass(_commandBuffers[i]);
+        vkCmdEndRenderPass(_commandBuffers[i]);
 
         if (vkEndCommandBuffer(_commandBuffers[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to record command buffer!");
@@ -1677,7 +1673,7 @@ void AppBase::Initialize() {
     
     InitRayTracing();
 
-    PrepareGUI();
+    InitializeGUI();
     CreateDepthResources();
     CreateFramebuffers();
     CreateCommandBuffers();
@@ -1757,10 +1753,8 @@ void AppBase::CreateBLAS() {
     //load gltf model
     auto _glTF = glTF::GetglTF();
     _glTF->Connect(_vulkanDevice);
-    _glTF->LoadFromFile("Assets/cornelBox/cornelBox.gltf");
-    _glTF->CreateDescriptors();
-    _glTF->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-    
+    _glTF->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    _glTF->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf");
     
     VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
     VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
@@ -1793,14 +1787,13 @@ void AppBase::CreateBLAS() {
     buildGeometryInfo.geometryCount = 1;
     buildGeometryInfo.pGeometries = &geometryInfo;
 
-    const uint32_t tirangleCount = 1;
     VkAccelerationStructureBuildSizesInfoKHR buildSizesInfo;
     buildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
     vkGetAccelerationStructureBuildSizesKHR(
         _vulkanDevice->_device,
         VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
         &buildGeometryInfo,
-        &tirangleCount,
+        &numTriangles,
         &buildSizesInfo
     );
 
@@ -1824,7 +1817,7 @@ void AppBase::CreateBLAS() {
 
     //コマンドバッファにBLASの構築を登録する
     VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo{};
-    buildRangeInfo.primitiveCount = tirangleCount;
+    buildRangeInfo.primitiveCount = numTriangles;
     buildRangeInfo.primitiveOffset = 0;
     buildRangeInfo.firstVertex = 0;
     buildRangeInfo.transformOffset = 0;
@@ -1992,6 +1985,8 @@ void AppBase::CreateStrageImage() {
 void AppBase::UpdateUniformBuffer() {
     _uniformData.projInverse = glm::inverse(_camera->matrix.perspective);
     _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
+    _uniformData.lightPos = glm::vec4(cos(glm::radians(timer * 360.0f)) * 40.0f, -20.0f + sin(glm::radians(timer * 360.0f)) * 20.0f, 25.0f + sin(glm::radians(timer * 360.0f)) * 5.0f, 0.0f);
+    _uniformData.vertexSize = sizeof(glTF::Vertex);
     memcpy(r_ubo.mapped, &_uniformData, sizeof(_uniformData));
 }
 
@@ -2019,16 +2014,34 @@ void AppBase::CreateRaytracingLayout() {
     resultImageLayoutBinding.descriptorCount = 1;
     resultImageLayoutBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
+    //uniform buffer
     VkDescriptorSetLayoutBinding uniformBufferBinding{};
     uniformBufferBinding.binding = 2;
     uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uniformBufferBinding.descriptorCount = 1;
-    uniformBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    uniformBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+    //vertex buffer
+    VkDescriptorSetLayoutBinding vertexBufferBinding{};
+    vertexBufferBinding.binding = 3;
+    vertexBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    vertexBufferBinding.descriptorCount = 1;
+    vertexBufferBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+    //index buffer
+    VkDescriptorSetLayoutBinding indexBufferBinding{};
+    indexBufferBinding.binding = 4;
+    indexBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    indexBufferBinding.descriptorCount = 1;
+    indexBufferBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
 
     std::vector<VkDescriptorSetLayoutBinding> bindings({
         accelerationStructurelayoutBinding,
         resultImageLayoutBinding,
-        uniformBufferBinding
+        uniformBufferBinding,
+        vertexBufferBinding,
+        indexBufferBinding
     });
     
     VkDescriptorSetLayoutCreateInfo descriptorSetCreateInfo{};
@@ -2087,7 +2100,7 @@ void AppBase::CreateRaytracingPipeline() {
     r_shaderGroups.push_back(closesthitShaderGroup);
     stages.push_back(chStage);
     
-    //パイプラインの生成
+    //create raytracing pipeline
     VkRayTracingPipelineCreateInfoKHR pipelineCreateInfo{};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
     pipelineCreateInfo.stageCount = static_cast<uint32_t>(stages.size());
@@ -2164,7 +2177,8 @@ void AppBase::CreateDescriptorSets() {
     std::vector<VkDescriptorPoolSize> poolSizes = {
         { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR , 1 },
         { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE , 1 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , 1 }
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , 1 },
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 }
     };
 
     VkDescriptorPoolCreateInfo poolInfo{};
@@ -2194,7 +2208,7 @@ void AppBase::CreateDescriptorSets() {
     accelerationInfo.accelerationStructureCount = 1;
     accelerationInfo.pAccelerationStructures = &r_topLevelAS.handle;
     
-    std::array<VkWriteDescriptorSet, 3>writeDescriptorSet{};
+    std::array<VkWriteDescriptorSet, 5>writeDescriptorSet{};
     writeDescriptorSet[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writeDescriptorSet[0].pNext = &accelerationInfo;
     writeDescriptorSet[0].dstSet = r_descriptorSet;
@@ -2224,6 +2238,30 @@ void AppBase::CreateDescriptorSets() {
     writeDescriptorSet[2].descriptorCount = 1;
     writeDescriptorSet[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writeDescriptorSet[2].pBufferInfo = &bufferInfo;
+
+    VkDescriptorBufferInfo vertexBufferInfo{};
+    vertexBufferInfo.buffer = glTF::GetglTF()->_vertices.buffer;
+    vertexBufferInfo.offset = 0;
+    vertexBufferInfo.range = VK_WHOLE_SIZE;
+
+    writeDescriptorSet[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet[3].dstSet = r_descriptorSet;
+    writeDescriptorSet[3].dstBinding = 3;
+    writeDescriptorSet[3].descriptorCount = 1;
+    writeDescriptorSet[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSet[3].pBufferInfo = &vertexBufferInfo;
+
+    VkDescriptorBufferInfo indexBufferInfo{};
+    indexBufferInfo.buffer = glTF::GetglTF()->_indices.buffer;
+    indexBufferInfo.offset = 0;
+    indexBufferInfo.range = VK_WHOLE_SIZE;
+
+    writeDescriptorSet[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet[4].dstSet = r_descriptorSet;
+    writeDescriptorSet[4].dstBinding = 4;
+    writeDescriptorSet[4].descriptorCount = 1;
+    writeDescriptorSet[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSet[4].pBufferInfo = &indexBufferInfo;
 
     vkUpdateDescriptorSets(_vulkanDevice->_device, static_cast<uint32_t>(writeDescriptorSet.size()), writeDescriptorSet.data(), 0, VK_NULL_HANDLE);
 
@@ -2394,7 +2432,7 @@ void AppBase::ShowMenuFile() {
     if (ImGui::MenuItem("Quit", "Alt+F4")) {}
 }
     
-void AppBase::SetImGuiWindow() {
+void AppBase::SetGUIWindow() {
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("File"))
@@ -2418,25 +2456,28 @@ void AppBase::SetImGuiWindow() {
     ImGui::ShowDemoWindow();
 }
 
-void AppBase::Run() {
-    while (!glfwWindowShouldClose(_window)) {
-        
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-        SetImGuiWindow();
-        ImGui::Render();
+void AppBase::UpdateGUI() {
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    SetGUIWindow();
+    ImGui::Render();
+}
 
-        auto tStart = std::chrono::high_resolution_clock::now();
+void AppBase::Run() {
+    auto tStart = std::chrono::high_resolution_clock::now();
+    while (!glfwWindowShouldClose(_window)) {
 
         glfwPollEvents();
         drawFrame();
-        UpdateUniformBuffer();
-        //glTF::GetglTF()->UpdateUniformBuffer(_camera->matrix.perspective, _camera->matrix.view);
-        
+
+        UpdateGUI();
+
         auto tEnd = std::chrono::high_resolution_clock::now();
-        auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
-        frameTimer = (float)tDiff / 1000.0f;
+        auto elapsedTime = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
+        timer = (float)elapsedTime / 1000.0f;
+        UpdateUniformBuffer();
+
         BuildCommandBuffers(true);
     }
     vkDeviceWaitIdle(_vulkanDevice->_device);
@@ -2473,12 +2514,9 @@ void AppBase::CleanupSwapchain() {
 void AppBase::Destroy() {
 
     CleanupSwapchain();
-    
-
+   
     //raytracing
-    r_vertexBufferBLAS.Destroy(_vulkanDevice->_device);
-    r_indexBufferBLAS.Destroy(_vulkanDevice->_device);
-    r_transformBufferBLAS.Destroy(_vulkanDevice->_device);
+    glTF::GetglTF()->Destroy();
     r_instanceBuffer.Destroy(_vulkanDevice->_device);
     r_ubo.Destroy(_vulkanDevice->_device);
     r_raygenShaderBindingTable.Destroy(_vulkanDevice->_device);
@@ -2500,7 +2538,7 @@ void AppBase::Destroy() {
     vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
     vkDestroyPipeline(_vulkanDevice->_device, r_pipeline, nullptr);
 
-    //glTF::GetglTF()->Destroy();
+    
     vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
     ImGui_ImplVulkan_Shutdown();
 
