@@ -16,6 +16,7 @@ public:
     struct Vertices {
         VkBuffer buffer;
         VkDeviceMemory memory;
+        int count;
     };
 
     struct Indices {
@@ -162,8 +163,15 @@ public:
     void LoadglTFMaterials(tinygltf::Model& input);
     void LoadTextureIndices(tinygltf::Model& input);
     void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
-    void LoadFromFile(std::string filename);
+    /**
+    * @brief    メモリフラグの指定
+    */
+    void SetMemoryPropertyFlags(VkMemoryPropertyFlags memoryFlags);
 
+    /**
+    * @brief    glTFファイルを読み込む
+    */
+    void LoadFromFile(std::string filename);
 
     /**
     * @brief    ディスクリプタプールの作成
@@ -225,8 +233,14 @@ public:
     */
     static glTF* GetglTF();
 
+
+
     DescriptorLayouts _descriptorSetLayout;
     VkDescriptorSet _uniformDescriptorSet;
+    VkMemoryPropertyFlags memoryPropertyFlags;
+    Vertices _vertices;
+    Indices _indices;
+    Initializers::Buffer _uniformBuffer;
 
 private:
     std::vector<Texture> _textures;
@@ -234,9 +248,7 @@ private:
     std::vector<glTFMaterial> _materials;
     std::vector<Node> _nodes;
 
-    Vertices _vertices;
-    Indices _indices;
-    Initializers::Buffer _uniformBuffer;
+
 
     VulkanDevice* _vulkanDevice;
 
@@ -581,6 +593,10 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
     }
 }
 
+void glTF::SetMemoryPropertyFlags(VkMemoryPropertyFlags memoryFlags) {
+    memoryPropertyFlags = memoryFlags;
+}
+
 void glTF::LoadFromFile(std::string filename) {
 
     tinygltf::Model glTFInput;
@@ -608,20 +624,35 @@ void glTF::LoadFromFile(std::string filename) {
 
     //vertex buffer
     VkDeviceSize vertexBufferSize = vertexBuffer.size() * sizeof(Vertex);
+    _vertices.count = static_cast<uint32_t>(vertexBuffer.size());
+
     Vertices vertexStaging;
-    _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vertexStaging.buffer, vertexStaging.memory);
+
+    _vulkanDevice->CreateBuffer(
+        vertexBufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        vertexStaging.buffer, vertexStaging.memory
+    );
 
     void* data;
     vkMapMemory(_vulkanDevice->_device, vertexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
     memcpy(data, vertexBuffer.data(), (size_t)vertexBufferSize);
     vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
 
-    _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _vertices.buffer, _vertices.memory);
+    _vulkanDevice->CreateBuffer(
+        vertexBufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | memoryPropertyFlags,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        _vertices.buffer, _vertices.memory
+    );
 
     _vulkanDevice->CopyBuffer(vertexStaging.buffer, _vertices.buffer, vertexBufferSize);
 
     vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
+
+
 
     //index buffer
     VkDeviceSize indexBufferSize = indexBuffer.size() * sizeof(uint32_t);
@@ -629,13 +660,23 @@ void glTF::LoadFromFile(std::string filename) {
 
     Vertices indexStaging;
 
-    _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, indexStaging.buffer, indexStaging.memory);
+    _vulkanDevice->CreateBuffer(
+        indexBufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        indexStaging.buffer, indexStaging.memory
+    );
 
     vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
     memcpy(data, indexBuffer.data(), (size_t)indexBufferSize);
     vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
 
-    _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _indices.buffer, _indices.memory);
+    _vulkanDevice->CreateBuffer(
+        indexBufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | memoryPropertyFlags,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        _indices.buffer, _indices.memory
+    );
 
     _vulkanDevice->CopyBuffer(indexStaging.buffer, _indices.buffer, indexBufferSize);
 
@@ -1628,27 +1669,15 @@ void AppBase::Initialize() {
     CreateRenderPass();
     _vulkanDevice->CreateCommandPool();
     
-    //raytracing用に変更する
-    //load gltf model
-    //glTF::GetglTF()->Connect(_vulkanDevice);
-    //glTF::GetglTF()->LoadFromFile("Assets/flightHelmet/FlightHelmet.gltf");
-    //glTF::GetglTF()->CreateDescriptors();
-
-    //CreateGraphicsPipeline();
-    
     _camera = new Camera();
     _camera->type = Camera::CameraType::lookat;
-    //_camera->flipY = true;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 512.0f);
     _camera->setTranslation(glm::vec3(0.0f, 0.0f, -2.5f));
-
-
     
     InitRayTracing();
 
     PrepareGUI();
-
     CreateDepthResources();
     CreateFramebuffers();
     CreateCommandBuffers();
@@ -1724,69 +1753,23 @@ AppBase::RayTracingScratchBuffer AppBase::CreateScratchBuffer(VkDeviceSize size)
 }
 
 void AppBase::CreateBLAS() {
-    struct Vertex
-    {
-        float pos[3];
-    };
 
-    std::vector<Vertex> tri = {
-        {{1.0f, 1.0f, 0.0f}},
-        {{-1.0f, 1.0f, 0.0f}},
-        {{0.0f, -1.0f, 0.0f}}
-    };
-
-    VkTransformMatrixKHR transformMatrix = {
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f
-    };
-
-    std::vector<uint32_t> indices = { 0,1,2 };
-
-    _vulkanDevice->CreateBuffer(
-        tri.size() * sizeof(Vertex),
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        r_vertexBufferBLAS.buffer,
-        r_vertexBufferBLAS.memory
-    );
-
-    vkMapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory, 0, VK_WHOLE_SIZE, 0, &r_vertexBufferBLAS.mapped);
-    memcpy(r_vertexBufferBLAS.mapped, tri.data(), tri.size() * sizeof(Vertex));
-    vkUnmapMemory(_vulkanDevice->_device, r_vertexBufferBLAS.memory);
-
-    _vulkanDevice->CreateBuffer(
-        indices.size() * sizeof(uint32_t),
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        r_indexBufferBLAS.buffer,
-        r_indexBufferBLAS.memory
-    );
-
-    vkMapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory, 0, VK_WHOLE_SIZE, 0, &r_indexBufferBLAS.mapped);
-    memcpy(r_indexBufferBLAS.mapped, indices.data(), indices.size() * sizeof(uint32_t));
-    vkUnmapMemory(_vulkanDevice->_device, r_indexBufferBLAS.memory);
-
-    _vulkanDevice->CreateBuffer(
-        sizeof(VkTransformMatrixKHR),
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        r_transformBufferBLAS.buffer,
-        r_transformBufferBLAS.memory
-    );
-
-    vkMapMemory(_vulkanDevice->_device, r_transformBufferBLAS.memory, 0, VK_WHOLE_SIZE, 0, &r_transformBufferBLAS.mapped);
-    memcpy(r_transformBufferBLAS.mapped, &transformMatrix, sizeof(VkTransformMatrixKHR));
-    vkUnmapMemory(_vulkanDevice->_device, r_transformBufferBLAS.memory);
-
+    //load gltf model
+    auto _glTF = glTF::GetglTF();
+    _glTF->Connect(_vulkanDevice);
+    _glTF->LoadFromFile("Assets/cornelBox/cornelBox.gltf");
+    _glTF->CreateDescriptors();
+    _glTF->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+    
+    
     VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
     VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
-    VkDeviceOrHostAddressConstKHR transformBufferDeviceAddress{};
-
     //デバイスアドレスを取得
-    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(r_vertexBufferBLAS.buffer);
-    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(r_indexBufferBLAS.buffer);
-    transformBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(r_transformBufferBLAS.buffer);
+    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_glTF->_vertices.buffer);
+    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_glTF->_indices.buffer);
+    
+    uint32_t numTriangles = static_cast<uint32_t>(_glTF->_indices.count) / 3;
+    uint32_t maxVertex = _glTF->_vertices.count;
 
     VkAccelerationStructureGeometryKHR geometryInfo{};
     geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -1795,13 +1778,12 @@ void AppBase::CreateBLAS() {
     geometryInfo.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
     geometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     geometryInfo.geometry.triangles.vertexData = vertexBufferDeviceAddress;
-    geometryInfo.geometry.triangles.maxVertex = static_cast<uint32_t>(tri.size());
-    geometryInfo.geometry.triangles.vertexStride = sizeof(Vertex);
+    geometryInfo.geometry.triangles.maxVertex = maxVertex;
+    geometryInfo.geometry.triangles.vertexStride = sizeof(glTF::Vertex);
     geometryInfo.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
     geometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
     geometryInfo.geometry.triangles.transformData.deviceAddress = 0;
     geometryInfo.geometry.triangles.transformData.hostAddress = nullptr;
-    geometryInfo.geometry.triangles.transformData = transformBufferDeviceAddress;
 
     //サイズ情報を取得する
     VkAccelerationStructureBuildGeometryInfoKHR buildGeometryInfo{};
@@ -2248,6 +2230,7 @@ void AppBase::CreateDescriptorSets() {
 }
 
 void AppBase::InitRayTracing() {
+
     CreateBLAS();
     CreateTLAS();
     CreateStrageImage();

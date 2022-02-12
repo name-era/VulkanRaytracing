@@ -62,6 +62,8 @@ public:
     struct UniformBlock {
         glm::mat4 viewInverse;
         glm::mat4 projInverse;
+        glm::vec4 lightPos;
+        uint32_t vertexSize;
     }_uniformData;
 
     enum ShaderGroups {
@@ -136,14 +138,14 @@ public:
     void CreateRenderPass();
 
     /**
-    * @brief    グラフィックスパイプラインを作成する
+    * @brief    通常のグラフィックスパイプラインを作成する
     */
     void CreateGraphicsPipeline();
     
     /**
     * @brief    exampleを使ったImGUIの表示
     */
-    void PrepareGUI();
+    void InitializeGUI();
 
     /**
     * @brief    イメージの作成
@@ -274,10 +276,16 @@ public:
     void drawFrame();
 
     void ShowMenuFile();
+
     /**
-    * @brief    ImGuiウィンドウの作成
+    * @brief    GUIウィンドウの作成
     */
-    void SetImGuiWindow();
+    void SetGUIWindow();
+
+    /**
+    * @brief    GUIの更新
+    */
+    void UpdateGUI();
 
     /**
     * @brief    ループ
@@ -352,9 +360,6 @@ public:
     VkDescriptorPool _descriptorPool;
 
     //レイトレーシング（あとで別クラスにする）
-    Initializers::Buffer r_vertexBufferBLAS;
-    Initializers::Buffer r_indexBufferBLAS;
-    Initializers::Buffer r_transformBufferBLAS;
     Initializers::Buffer r_instanceBuffer;
     Initializers::Buffer r_ubo;
     Initializers::Buffer r_raygenShaderBindingTable;
