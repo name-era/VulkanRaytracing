@@ -1666,10 +1666,10 @@ void AppBase::Initialize() {
     _vulkanDevice->CreateCommandPool();
     
     _camera = new Camera();
-    _camera->type = Camera::CameraType::lookat;
+    _camera->type = Camera::CameraType::firstperson;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 512.0f);
-    _camera->setTranslation(glm::vec3(0.0f, 0.0f, -2.5f));
+    _camera->setTranslation(glm::vec3(0.0f, 0.5f, -2.0f));
     
     InitRayTracing();
 
@@ -1985,13 +1985,13 @@ void AppBase::CreateStrageImage() {
 void AppBase::UpdateUniformBuffer() {
     _uniformData.projInverse = glm::inverse(_camera->matrix.perspective);
     _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
-    _uniformData.lightPos = glm::vec4(cos(glm::radians(timer * 360.0f)) * 40.0f, -20.0f + sin(glm::radians(timer * 360.0f)) * 20.0f, 25.0f + sin(glm::radians(timer * 360.0f)) * 5.0f, 0.0f);
+    _uniformData.lightPos = glm::vec4(cos(glm::radians(timer * 360.0f)) * 40.0f, -50.0f + sin(glm::radians(timer * 360.0f)) * 20.0f, 25.0f + sin(glm::radians(timer * 360.0f)) * 5.0f, 0.0f);
     _uniformData.vertexSize = sizeof(glTF::Vertex);
     memcpy(r_ubo.mapped, &_uniformData, sizeof(_uniformData));
 }
 
 void AppBase::CreateUniformBuffer() {
-    VkDeviceSize bufferSize = sizeof(UniformBlock);
+    VkDeviceSize bufferSize = sizeof(_uniformData);
     _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, r_ubo.buffer, r_ubo.memory);
 
     vkMapMemory(_vulkanDevice->_device, r_ubo.memory, 0, VK_WHOLE_SIZE, 0, &r_ubo.mapped);
@@ -2063,7 +2063,7 @@ void AppBase::CreateRaytracingPipeline() {
     std::vector<VkPipelineShaderStageCreateInfo> stages;
 
     //raygen
-    auto rgStage = _shader->LoadShaderProgram("Shaders/raytracing/raygen.rgen.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+    auto rgStage = _shader->LoadShaderProgram("Shaders/raytracingReflections/raygen.rgen.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR);
     VkRayTracingShaderGroupCreateInfoKHR raygenShaderGroup{};
     raygenShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     raygenShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2076,7 +2076,7 @@ void AppBase::CreateRaytracingPipeline() {
     
 
     //miss
-    auto missStage = _shader->LoadShaderProgram("Shaders/raytracing/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
+    auto missStage = _shader->LoadShaderProgram("Shaders/raytracingReflections/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
     VkRayTracingShaderGroupCreateInfoKHR missShaderGroup{};
     missShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     missShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2089,7 +2089,7 @@ void AppBase::CreateRaytracingPipeline() {
     
 
     //closest hit
-    auto chStage = _shader->LoadShaderProgram("Shaders/raytracing/closesthit.rchit.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+    auto chStage = _shader->LoadShaderProgram("Shaders/raytracingReflections/closesthit.rchit.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
     VkRayTracingShaderGroupCreateInfoKHR closesthitShaderGroup{};
     closesthitShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     closesthitShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
@@ -2230,7 +2230,7 @@ void AppBase::CreateDescriptorSets() {
     VkDescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = r_ubo.buffer;
     bufferInfo.offset = 0;
-    bufferInfo.range = sizeof(UniformBlock);
+    bufferInfo.range = VK_WHOLE_SIZE;
 
     writeDescriptorSet[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writeDescriptorSet[2].dstSet = r_descriptorSet;
@@ -2508,7 +2508,7 @@ void AppBase::CleanupSwapchain() {
     //vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
     //vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
-    //glTF::GetglTF()->Cleanup();
+    glTF::GetglTF()->Cleanup();
 }
 
 void AppBase::Destroy() {
@@ -2558,6 +2558,6 @@ void AppBase::Destroy() {
     delete _vulkanDevice;
     delete _swapchain;
     delete _shader;
-    //delete glTF::GetglTF();
+    delete glTF::GetglTF();
     delete _camera;
 }
