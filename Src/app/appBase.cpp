@@ -137,24 +137,32 @@ namespace glTF {
             VkDescriptorSet descriptorSet;
         };
 
-        struct Primitive {
-            uint32_t firstIndex;
-            uint32_t indexCount;
-            int32_t materialIndex;
-            Material& material;
-        };
-
         struct UniformBlock {
             glm::mat4 projection;
             glm::mat4 model;
             glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, -5.0f, 1.0f);
         }_ubo;
 
+        struct Primitive {
+            uint32_t firstIndex;
+            uint32_t indexCount;
+            uint32_t firstVertex;
+            uint32_t vertexCount;
+            Material& material;
+        };
+
+        struct Mesh {
+            std::vector<Primitive*> primitives;
+            std::string name;
+        };
+
         struct Node {
             Node* parent;
             std::vector<Node> children;
-            std::vector<Primitive> primitive;
+            Mesh* mesh;
             glm::mat4 matrix;
+            std::string name;
+            uint32_t index;
         };
 
         struct DescriptorLayouts {
@@ -188,7 +196,6 @@ namespace glTF {
         void LoadMaterials(tinygltf::Model& input);
 
 
-        void LoadTextureIndices(tinygltf::Model& input);
         void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
         /**
         * @brief    メモリフラグの指定
@@ -271,7 +278,6 @@ namespace glTF {
 
     private:
         std::vector<Texture> _textures;
-        std::vector<uint32_t> _textureIndices;
         std::vector<Node> _nodes;
         std::vector<Material> _materials;
 
@@ -527,133 +533,161 @@ void glTF::Model::LoadMaterials(tinygltf::Model& input) {
 
 }
 
-void glTF::Model::LoadTextureIndices(tinygltf::Model& input) {
-    _textureIndices.resize(input.textures.size());
-    for (uint32_t i = 0; i < input.textures.size(); i++) {
-        _textureIndices[i] = input.textures[i].source;
-    }
-}
-
 void glTF::Model::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
-    Node node{};
-    node.matrix = glm::mat4(1.0f);
+    Node newNode{};
+    newNode.parent = parent;
+    newNode.matrix = glm::mat4(1.0f);
+    newNode.name = newNode.name;
 
     //4×4行列に修正する
     if (inputNode.scale.size() == 3) {
-        node.matrix = glm::scale(node.matrix, glm::vec3(glm::make_vec3(inputNode.scale.data())));
+        newNode.matrix = glm::scale(newNode.matrix, glm::vec3(glm::make_vec3(inputNode.scale.data())));
     }
 
     if (inputNode.translation.size() == 3) {
-        node.matrix = glm::translate(node.matrix, glm::vec3(glm::make_vec3(inputNode.translation.data())));
+        newNode.matrix = glm::translate(newNode.matrix, glm::vec3(glm::make_vec3(inputNode.translation.data())));
     }
     if (inputNode.rotation.size() == 4) {
         glm::quat q = glm::make_quat(inputNode.rotation.data());
-        node.matrix *= glm::mat4(q);
+        newNode.matrix *= glm::mat4(q);
     }
 
     if (inputNode.matrix.size() == 16) {
-        node.matrix = glm::make_mat4x4(inputNode.matrix.data());
+        newNode.matrix = glm::make_mat4x4(inputNode.matrix.data());
     }
 
     if (inputNode.children.size() > 0) {
         for (size_t i = 0; i < inputNode.children.size(); i++) {
-            LoadNode(input.nodes[inputNode.children[i]], input, &node, indexBuffer, vertexBuffer);
+            LoadNode(input.nodes[inputNode.children[i]], input, &newNode, indexBuffer, vertexBuffer);
         }
     }
 
-    //ノードがメッシュデータを持っている場合、頂点とインデックスをロードする
+    //ノードがメッシュデータを持っている場合
     if (inputNode.mesh > -1) {
         const tinygltf::Mesh mesh = input.meshes[inputNode.mesh];
+        Mesh* newMesh = new Mesh();
+        newMesh->name = mesh.name;
 
-        //このノードのメッシュに対するプリミティブ分回す
         for (size_t i = 0; i < mesh.primitives.size(); i++) {
-            const tinygltf::Primitive& glTFPrimitive = mesh.primitives[i];
-            uint32_t firstIndex = static_cast<uint32_t> (indexBuffer.size());
+            const tinygltf::Primitive& primitive = mesh.primitives[i];
+
+            if (primitive.indices < 0) {
+                continue;
+            }
             uint32_t vertexStart = static_cast<uint32_t>(vertexBuffer.size());
+            uint32_t indexStart = static_cast<uint32_t> (indexBuffer.size());
             uint32_t indexCount = 0;
+            uint32_t vertexCount = 0;
+            
+            //vertices
+            {    
+                const float* positionBuffer = nullptr;
+                const float* normalsBuffer = nullptr;
+                const float* texCoordsBuffer = nullptr;
+                const float* colorBuffer = nullptr;
+                uint32_t numColorComponent;
 
-
-            //頂点
-            const float* positionBuffer = nullptr;
-            const float* normalsBuffer = nullptr;
-            const float* texCoordsBuffer = nullptr;
-            size_t vertexCount = 0;
-
-            //頂点
-            if (glTFPrimitive.attributes.find("POSITION") != glTFPrimitive.attributes.end()) {
-                const tinygltf::Accessor& accessor = input.accessors[glTFPrimitive.attributes.find("POSITION")->second];
-                const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
-                positionBuffer = reinterpret_cast<const float*> (&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-                vertexCount = accessor.count;
-            }
-            //ノーマル
-            if (glTFPrimitive.attributes.find("NORMAL") != glTFPrimitive.attributes.end()) {
-                const tinygltf::Accessor& accessor = input.accessors[glTFPrimitive.attributes.find("NORMAL")->second];
-                const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
-                normalsBuffer = reinterpret_cast<const float*>(&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-            }
-            //テクスチャ座標
-            if (glTFPrimitive.attributes.find("TEXCOORD_0") != glTFPrimitive.attributes.end()) {
-                const tinygltf::Accessor& accessor = input.accessors[glTFPrimitive.attributes.find("TEXCOORD_0")->second];
-                const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
-                texCoordsBuffer = reinterpret_cast<const float*> (&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-            }
-            //データをモデルに適用
-            for (size_t v = 0; v < vertexCount; v++) {
-                Vertex vert{};
-                vert.pos = glm::vec4(glm::make_vec3(&positionBuffer[v * 3]), 1.0f);
-                vert.normal = glm::normalize(glm::vec3(normalsBuffer ? glm::make_vec3(&normalsBuffer[v * 3]) : glm::vec3(0.0f)));
-                vert.uv = texCoordsBuffer ? glm::make_vec2(&texCoordsBuffer[v * 2]) : glm::vec3(0.0f);
-                vert.color = glm::vec3(1.0f);
-                vertexBuffer.push_back(vert);
-            }
-
-            //インデックス
-            const tinygltf::Accessor& accessor = input.accessors[glTFPrimitive.indices];
-            const tinygltf::BufferView& bufferView = input.bufferViews[accessor.bufferView];
-            const tinygltf::Buffer& buffer = input.buffers[bufferView.buffer];
-
-            indexCount += static_cast<uint32_t>(accessor.count);
-
-            switch (accessor.componentType) {
-            case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT: {
-                const uint32_t* buf = reinterpret_cast<const uint32_t*> (&buffer.data[accessor.byteOffset + bufferView.byteOffset]);
-                for (size_t index = 0; index < accessor.count; index++) {
-                    indexBuffer.push_back(buf[index] + vertexStart);
+                if (primitive.attributes.find("POSITION") != primitive.attributes.end()) {
+                    const tinygltf::Accessor& accessor = input.accessors[primitive.attributes.find("POSITION")->second];
+                    const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
+                    positionBuffer = reinterpret_cast<const float*> (&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+                    vertexCount = accessor.count;
                 }
-                break;
-            }
-            case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT: {
-                const uint16_t* buf = reinterpret_cast<const uint16_t*>(&buffer.data[accessor.byteOffset + bufferView.byteOffset]);
-                for (size_t index = 0; index < accessor.count; index++) {
-                    indexBuffer.push_back(buf[index] + vertexStart);
-                }
-                break;
-            }
-            case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE: {
-                const uint8_t* buf = reinterpret_cast<const uint8_t*>(&buffer.data[accessor.byteOffset + bufferView.byteOffset]);
-                for (size_t index = 0; index < accessor.count; index++) {
-                    indexBuffer.push_back(buf[index] + vertexStart);
-                }
-                break;
-            }
-            default:
-                std::cerr << "Index conponent type" << accessor.componentType << "not supported!" << std::endl;
-                return;
-            }
 
-            Primitive primitive{};
-            primitive.firstIndex = firstIndex;
-            primitive.indexCount = indexCount;
-            primitive.materialIndex = glTFPrimitive.material;
-            node.primitive.push_back(primitive);
+                if (primitive.attributes.find("NORMAL") != primitive.attributes.end()) {
+                    const tinygltf::Accessor& accessor = input.accessors[primitive.attributes.find("NORMAL")->second];
+                    const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
+                    normalsBuffer = reinterpret_cast<const float*>(&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+                }
+
+                if (primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end()) {
+                    const tinygltf::Accessor& accessor = input.accessors[primitive.attributes.find("TEXCOORD_0")->second];
+                    const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
+                    texCoordsBuffer = reinterpret_cast<const float*> (&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+                }
+
+                if (primitive.attributes.find("COLOR_0") != primitive.attributes.end()) {
+                    const tinygltf::Accessor& accessor = input.accessors[primitive.attributes.find("COLOR_0")->second];
+                    const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
+                    colorBuffer = reinterpret_cast<const float*> (&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+                    numColorComponent = accessor.type == TINYGLTF_PARAMETER_TYPE_FLOAT_VEC3 ? 3 : 4;
+                }
+
+                for (size_t v = 0; v < vertexCount; v++) {
+                    Vertex vert{};
+                    vert.pos = glm::vec4(glm::make_vec3(&positionBuffer[v * 3]), 1.0f);
+                    vert.normal = glm::normalize(glm::vec3(normalsBuffer ? glm::make_vec3(&normalsBuffer[v * 3]) : glm::vec3(0.0f)));
+                    vert.uv = texCoordsBuffer ? glm::make_vec2(&texCoordsBuffer[v * 2]) : glm::vec3(0.0f);
+                    if (colorBuffer) {
+                        switch (numColorComponent) {
+                        case 3:
+                            vert.color = glm::vec4(glm::make_vec3(&colorBuffer[v * 3]), 1.0f);
+                        case 4:
+                            vert.color = glm::make_vec4(&colorBuffer[v * 4]);
+                        }
+                    }
+                    else {
+                        vert.color = glm::vec3(1.0f);
+                    }
+                    vertexBuffer.push_back(vert);
+                }
+            }
+            
+
+            //indices
+            {
+                const tinygltf::Accessor& accessor = input.accessors[primitive.indices];
+                const tinygltf::BufferView& bufferView = input.bufferViews[accessor.bufferView];
+                const tinygltf::Buffer& buffer = input.buffers[bufferView.buffer];
+
+                indexCount = static_cast<uint32_t>(accessor.count);
+
+                switch (accessor.componentType) {
+                case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT: {
+                    uint32_t* buf = new uint32_t[accessor.count];
+                    memcpy(buf, &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(uint32_t));
+                    for (size_t index = 0; index < accessor.count; index++) {
+                        indexBuffer.push_back(buf[index] + vertexStart);
+                    }
+                    break;
+                }
+                case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT: {
+                    uint16_t* buf = new uint16_t[accessor.count];
+                    memcpy(buf, &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(uint16_t));
+                    for (size_t index = 0; index < accessor.count; index++) {
+                        indexBuffer.push_back(buf[index] + vertexStart);
+                    }
+                    break;
+                }
+                case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE: {
+                    uint8_t* buf = new uint8_t[accessor.count];
+                    memcpy(buf, &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(uint8_t));
+                    for (size_t index = 0; index < accessor.count; index++) {
+                        indexBuffer.push_back(buf[index] + vertexStart);
+                    }
+                    break;
+                }
+                default:
+                    std::cerr << "Index conponent type" << accessor.componentType << "not supported!" << std::endl;
+                    return;
+                }
+            }
+            
+            
+            Primitive* newPrimitive;
+            newPrimitive->firstVertex = vertexStart;
+            newPrimitive->vertexCount = vertexCount;
+            newPrimitive->firstIndex = indexStart;
+            newPrimitive->indexCount = indexCount;
+            newMesh->primitives.push_back(newPrimitive);
         }
+        newNode.mesh = newMesh;
     }
     if (parent) {
-        parent->children.push_back(node);
+        parent->children.push_back(newNode);
     }
     else {
-        _nodes.push_back(node);
+        _nodes.push_back(newNode);
     }
 }
 
@@ -675,11 +709,14 @@ void glTF::Model::LoadFromFile(std::string filename) {
     if (fileLoaded) {
         LoadImages(glTFInput);
         LoadMaterials(glTFInput);
-        LoadTextureIndices(glTFInput);
+
         const tinygltf::Scene& scene = glTFInput.scenes[0];
         for (size_t i = 0; i < scene.nodes.size(); i++) {
             const tinygltf::Node node = glTFInput.nodes[scene.nodes[i]];
             LoadNode(node, glTFInput, nullptr, indexBuffer, vertexBuffer);
+        }
+        if (glTFInput.animations.size() > 0) {
+            //ここでアニメーションを読み込む
         }
     }
     else {
