@@ -12,11 +12,24 @@
 
 namespace glTF {
 
+    enum RenderFlags {
+        BindImages = 0x00000001,
+        RenderOpaqueNodes = 0x00000002,
+        RenderAlphaMaskedNodes = 0x00000004,
+        RenderAlphaBlendedNodes = 0x00000008
+    };
+
+    enum DescriptorBindingFlags {
+        ImageBaseColor = 0x00000001,
+        ImageNormalMap = 0x00000002
+    };
+    uint32_t descriptorBidningFlags = DescriptorBindingFlags::ImageBaseColor;
+
     struct Texture {
-        VkImage textureImage;
-        VkDeviceMemory textureImageMemory;
-        VkImageView textureImageView;
-        VkSampler textureSampler;
+        VkImage image;
+        VkDeviceMemory memory;
+        VkImageView view;
+        VkSampler sampler;
         VulkanDevice* vulkanDevice;
         uint32_t mipLevel;
         VkQueue queue;
@@ -55,126 +68,167 @@ namespace glTF {
         * @brief    初期化
         */
         void Connect(VulkanDevice* device, VkQueue transQueue);
+
+        /**
+        * @brief    リソースの破棄
+        */
+        void Destroy();
     };
+
+    struct Vertices {
+        VkBuffer buffer;
+        VkDeviceMemory memory;
+        int count;
+    };
+
+    struct Indices {
+        int count;
+        VkBuffer buffer;
+        VkDeviceMemory memory;
+    };
+
+    struct Vertex {
+
+        glm::vec3 pos;
+        glm::vec3 normal;
+        glm::vec2 uv;
+        glm::vec4 color;
+
+        static VkVertexInputBindingDescription getBindingDescription() {
+            VkVertexInputBindingDescription bindingDescription{};
+            bindingDescription.binding = 0;
+            bindingDescription.stride = sizeof(Vertex);
+            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+            return bindingDescription;
+        }
+
+        static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
+
+            std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
+
+            attributeDescriptions[0].binding = 0;
+            attributeDescriptions[0].location = 0;
+            attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+            attributeDescriptions[1].binding = 0;
+            attributeDescriptions[1].location = 1;
+            attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attributeDescriptions[1].offset = offsetof(Vertex, normal);
+
+            attributeDescriptions[2].binding = 0;
+            attributeDescriptions[2].location = 2;
+            attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+            attributeDescriptions[2].offset = offsetof(Vertex, uv);
+
+            attributeDescriptions[3].binding = 0;
+            attributeDescriptions[3].location = 3;
+            attributeDescriptions[3].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+            attributeDescriptions[3].offset = offsetof(Vertex, color);
+
+            return attributeDescriptions;
+        }
+    };
+
+    enum FileLoadingFlags {
+        None = 0x00000000,
+        PreTransformVertices = 0x00000001,
+        PreMultiplyVertexColors = 0x00000002,
+        FlipY = 0x00000004,
+        DontLoadImages = 0x00000008
+    };
+
+    struct Material {
+        glTF::Texture* baseColorTexture = nullptr;
+        glTF::Texture* metallicRoughnessTexture = nullptr;
+        glTF::Texture* normalTexture = nullptr;
+        glTF::Texture* occlusionTexture = nullptr;
+        glTF::Texture* emissiveTexture = nullptr;
+        //glTF::Texture* specularGlossinessTexture;
+        //glTF::Texture* diffuseTexture;
+
+        glm::vec4 baseColorFactor = glm::vec4(1.0f);
+        float roughnessFactor = 1.0f;
+        float metallicFactor = 1.0f;
+
+        enum AlphaMode { ALPHA_OPAQUE, ALPHA_MASK, ALPHA_BLEND };
+        AlphaMode alphaMode = ALPHA_OPAQUE;
+        float alphaCutoff = 1.0f;
+
+        VkDescriptorSet descriptorSet;
+        void createDescriptorSet(VulkanDevice* vulkanDevice, VkDescriptorPool descriptorPool, VkDescriptorSetLayout descriptorSetLayout);
+    };
+
+    struct Primitive {
+        uint32_t firstIndex;
+        uint32_t indexCount;
+        uint32_t firstVertex;
+        uint32_t vertexCount;
+        Material& material;
+
+        Primitive(uint32_t firstIndex, uint32_t indexCount, Material& material);
+    };
+
+    struct Mesh {
+        std::vector<Primitive*> primitives;
+        std::string name;
+
+        struct UniformBuffer {
+            VkBuffer buffer;
+            VkDeviceMemory memory;
+            VkDescriptorSet descriptorSet;
+            void* mapped;
+        }uniformBuffer;
+
+        struct UniformBlock {
+            glm::mat4 matrix;
+            glm::mat4 jointMatrix[64]{};
+            float jointcount{ 0 };
+        }uniformBlock;
+
+        VulkanDevice* vulkanDevice;
+        Mesh(VulkanDevice* device, glm::mat4 matrix);
+        ~Mesh();
+    };
+
+    struct Node {
+        Node* parent;
+        std::vector<Node*> children;
+        Mesh* mesh;
+        glm::mat4 matrix;
+        std::string name;
+        uint32_t index;
+        glm::vec3 translation{};
+        glm::vec3 scale{ 1.0f };
+        glm::quat rotation{};
+        
+        /**
+        * @brief   ローカル座標の取得
+        */
+        glm::mat4 localMatrix();
+
+        /**
+        * @brief   座標の取得
+        */
+        glm::mat4 getMatrix();
+        
+        /**
+        * @brief    ユニフォームバッファの更新
+        */
+        void UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view);
+    };
+
+    struct DescriptorLayouts {
+        VkDescriptorSetLayout ubo;
+        VkDescriptorSetLayout image;
+    }_descriptorSetLayout;
 
     class Model {
     public:
 
-        struct Vertices {
-            VkBuffer buffer;
-            VkDeviceMemory memory;
-            int count;
-        };
-
-        struct Indices {
-            int count;
-            VkBuffer buffer;
-            VkDeviceMemory memory;
-        };
-
-        struct Vertex {
-
-            glm::vec3 pos;
-            glm::vec3 normal;
-            glm::vec2 uv;
-            glm::vec3 color;
-
-            static VkVertexInputBindingDescription getBindingDescription() {
-                VkVertexInputBindingDescription bindingDescription{};
-                bindingDescription.binding = 0;
-                bindingDescription.stride = sizeof(Vertex);
-                bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-                return bindingDescription;
-            }
-
-
-            static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
-
-                std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
-
-                attributeDescriptions[0].binding = 0;
-                attributeDescriptions[0].location = 0;
-                attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-                attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-                attributeDescriptions[1].binding = 0;
-                attributeDescriptions[1].location = 1;
-                attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-                attributeDescriptions[1].offset = offsetof(Vertex, normal);
-
-                attributeDescriptions[2].binding = 0;
-                attributeDescriptions[2].location = 2;
-                attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-                attributeDescriptions[2].offset = offsetof(Vertex, uv);
-
-                attributeDescriptions[3].binding = 0;
-                attributeDescriptions[3].location = 3;
-                attributeDescriptions[3].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-                attributeDescriptions[3].offset = offsetof(Vertex, color);
-
-                return attributeDescriptions;
-            }
-        };
-        
-        struct Material {
-            glTF::Texture* baseColorTexture = nullptr;
-            glTF::Texture* metallicRoughnessTexture = nullptr;
-            glTF::Texture* normalTexture = nullptr;
-            glTF::Texture* occlusionTexture = nullptr;
-            glTF::Texture* emissiveTexture = nullptr;
-            //glTF::Texture* specularGlossinessTexture;
-            //glTF::Texture* diffuseTexture;
-
-            glm::vec4 baseColorFactor = glm::vec4(1.0f);
-            float roughnessFactor = 1.0f;
-            float metallicFactor = 1.0f;
-
-            enum AlphaMode { ALPHA_OPEQUE, ALPHA_MASK, ALPHA_BLEND };
-            AlphaMode alphaMode = ALPHA_OPAQUE;
-            float alphaCutoff = 1.0f;
-
-            VkDescriptorSet descriptorSet;
-        };
-
-        struct UniformBlock {
-            glm::mat4 projection;
-            glm::mat4 model;
-            glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, -5.0f, 1.0f);
-        }_ubo;
-
-        struct Primitive {
-            uint32_t firstIndex;
-            uint32_t indexCount;
-            uint32_t firstVertex;
-            uint32_t vertexCount;
-            Material& material;
-        };
-
-        struct Mesh {
-            std::vector<Primitive*> primitives;
-            std::string name;
-        };
-
-        struct Node {
-            Node* parent;
-            std::vector<Node> children;
-            Mesh* mesh;
-            glm::mat4 matrix;
-            std::string name;
-            uint32_t index;
-        };
-
-        struct DescriptorLayouts {
-            VkDescriptorSetLayout matrix;
-            VkDescriptorSetLayout texture;
-        };
-
-
         Model();
         ~Model() {};
-
-    public:
 
         /**
         * @brief    コピーコンストラクタの禁止
@@ -197,15 +251,11 @@ namespace glTF {
 
 
         void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
+        
         /**
-        * @brief    メモリフラグの指定
+        * @brief    バッファ作成時のメモリフラグを指定する
         */
         void SetMemoryPropertyFlags(VkMemoryPropertyFlags memoryFlags);
-
-        /**
-        * @brief    glTFファイルを読み込む
-        */
-        void LoadFromFile(std::string filename);
 
         /**
         * @brief    ディスクリプタプールの作成
@@ -218,6 +268,11 @@ namespace glTF {
         void CreateDescriptorSetLayout();
 
         /**
+        * @brief    ノードのディスクリプタレイアウトの作成
+        */
+        void CreateNodeDescriptorSets(Node* node);
+
+        /**
         * @brief    ディスクリプタセットを作成する
         */
         void CreateDescriptorSets();
@@ -228,6 +283,11 @@ namespace glTF {
         void CreateDescriptors();
 
         /**
+        * @brief    glTFファイルを読み込む
+        */
+        void LoadFromFile(std::string filename, uint32_t fileLoadingFlags);
+
+        /**
         * @brief    初期化
         */
         void Connect(VulkanDevice* device);
@@ -235,17 +295,12 @@ namespace glTF {
         /**
         * @brief    ノード描画
         */
-        void DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node node);
+        void DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node* node, uint32_t renderFlags, uint32_t bindImageSet = 1);
 
         /**
         * @brief    モデル描画
         */
-        void Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout);
-
-        /**
-        * @brief    ユニフォームバッファの更新
-        */
-        void UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view);
+        void Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, uint32_t renderFlags, uint32_t bindImageSet);
 
         /**
         * @brief    再構成
@@ -253,7 +308,7 @@ namespace glTF {
         void Recreate();
 
         /**
-        * @brief    クリーン
+        * @brief    スワップチェーン再作成時
         */
         void Cleanup();
 
@@ -268,24 +323,19 @@ namespace glTF {
         static Model* GetglTF();
 
 
-
-        DescriptorLayouts _descriptorSetLayout;
-        VkDescriptorSet _uniformDescriptorSet;
         VkMemoryPropertyFlags memoryPropertyFlags;
         Vertices _vertices;
         Indices _indices;
-        Initializers::Buffer _uniformBuffer;
 
     private:
+        std::vector<Node*> _nodes;
+        std::vector<Node*> _linearNodes;
         std::vector<Texture> _textures;
-        std::vector<Node> _nodes;
         std::vector<Material> _materials;
 
 
         VulkanDevice* _vulkanDevice;
-
         uint32_t _mipLevel;
-
         VkDescriptorPool _descriptorPool;
 
     };
@@ -294,14 +344,13 @@ namespace glTF {
 
 namespace {
     //シングルトン
-    glTF::Model* s_gltf = nullptr;
+    glTF::Model* s_model = nullptr;
 
 }
 
-glTF::Model::Model() {
-
-}
-
+/*******************************************************************************************************************
+*                                             glTF Texture
+********************************************************************************************************************/
 void glTF::Texture::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -377,10 +426,10 @@ void glTF::Texture::PrepareImage(void* buffer, VkDeviceSize bufferSize, VkFormat
     memcpy(data, buffer, bufferSize);
     vkUnmapMemory(vulkanDevice->_device, stagingBufferMemory);
 
-    CreateImage(texWidth, texHeight, mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
-    vulkanDevice->TransitionImageLayout(textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevel);
-    CopyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    vulkanDevice->TransitionImageLayout(textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevel);
+    CreateImage(texWidth, texHeight, mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
+    vulkanDevice->TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevel);
+    CopyBufferToImage(stagingBuffer, image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    vulkanDevice->TransitionImageLayout(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevel);
 
     vkDestroyBuffer(vulkanDevice->_device, stagingBuffer, nullptr);
     vkFreeMemory(vulkanDevice->_device, stagingBufferMemory, nullptr);
@@ -398,7 +447,7 @@ void glTF::Texture::CreateImageView(VkImage image, VkFormat format, VkImageAspec
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
-    if (vkCreateImageView(vulkanDevice->_device, &viewInfo, nullptr, &textureImageView) != VK_SUCCESS) {
+    if (vkCreateImageView(vulkanDevice->_device, &viewInfo, nullptr, &view) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
     }
 }
@@ -425,7 +474,7 @@ void glTF::Texture::CreateSampler() {
     samplerInfo.maxLod = static_cast<float>(mipLevel);
     samplerInfo.mipLodBias = 0.0f;
 
-    if (vkCreateSampler(vulkanDevice->_device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
+    if (vkCreateSampler(vulkanDevice->_device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture sampler!");
     }
 }
@@ -456,12 +505,147 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage) {
 
 
     PrepareImage(buffer, bufferSize, IMAGEFORMAT, gltfImage.width, gltfImage.height);
-    CreateImageView(textureImage, IMAGEFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
+    CreateImageView(image, IMAGEFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
     CreateSampler();
 
     if (deleteBuffer) {
         delete[] buffer;
     }
+}
+
+void glTF::Texture::Connect(VulkanDevice* device, VkQueue transQueue) {
+
+    vulkanDevice = device;
+    queue = transQueue;
+}
+
+void glTF::Texture::Destroy() {
+    vkDestroySampler(vulkanDevice->_device, sampler, nullptr);
+    vkDestroyImageView(vulkanDevice->_device, view, nullptr);
+    vkDestroyImage(vulkanDevice->_device, image, nullptr);
+    vkFreeMemory(vulkanDevice->_device, memory, nullptr);
+}
+
+/*******************************************************************************************************************
+*                                             glTF Material
+********************************************************************************************************************/
+void glTF::Material::createDescriptorSet(VulkanDevice* vulkanDevice, VkDescriptorPool descriptorPool, VkDescriptorSetLayout descriptorSetLayout) {
+
+    VkDescriptorSetAllocateInfo allocInfoMaterial{};
+    allocInfoMaterial.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfoMaterial.descriptorPool = descriptorPool;
+    allocInfoMaterial.descriptorSetCount = 1;
+    allocInfoMaterial.pSetLayouts = &descriptorSetLayout;
+
+    if (vkAllocateDescriptorSets(vulkanDevice->_device, &allocInfoMaterial, &descriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate descriptor sets!");
+    }
+
+    
+    std::vector<VkDescriptorImageInfo> imageInfos{};
+    std::vector<VkWriteDescriptorSet> writeDescriptorSets{};
+    
+    if (descriptorBidningFlags & DescriptorBindingFlags::ImageBaseColor) {
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageView = baseColorTexture->view;
+        imageInfo.sampler = baseColorTexture->sampler;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        
+        VkWriteDescriptorSet writeDescriptorSet{};
+        writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSet.dstSet = descriptorSet;
+        writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeDescriptorSet.dstBinding = 0;
+        writeDescriptorSet.pImageInfo = &imageInfo;
+        writeDescriptorSet.descriptorCount = 1;
+
+        imageInfos.push_back(imageInfo);
+        writeDescriptorSets.push_back(writeDescriptorSet);
+    }
+    if (normalTexture && descriptorBidningFlags & DescriptorBindingFlags::ImageNormalMap) {
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageView = normalTexture->view;
+        imageInfo.sampler = normalTexture->sampler;
+
+        VkWriteDescriptorSet writeDescriptorSet{};
+        writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSet.dstSet = descriptorSet;
+        writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeDescriptorSet.dstBinding = 0;
+        writeDescriptorSet.pImageInfo = &imageInfo;
+        writeDescriptorSet.descriptorCount = 1;
+
+        imageInfos.push_back(imageInfo);
+        writeDescriptorSets.push_back(writeDescriptorSet);
+    }
+    
+    vkUpdateDescriptorSets(vulkanDevice->_device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+}
+
+/*******************************************************************************************************************
+*                                             glTF Primitive
+********************************************************************************************************************/
+glTF::Primitive::Primitive(uint32_t firstIndex, uint32_t indexCount, Material& material):
+    firstIndex(firstIndex),
+    indexCount(indexCount),
+    material(material)
+{
+}
+
+/*******************************************************************************************************************
+*                                             glTF Mesh
+********************************************************************************************************************/
+glTF::Mesh::Mesh(VulkanDevice* device, glm::mat4 matrix) {
+    vulkanDevice = device;
+    uniformBlock.matrix = matrix;
+    vulkanDevice->CreateBuffer(
+        sizeof(uniformBlock),
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        uniformBuffer.buffer, uniformBuffer.memory
+    );
+    vkMapMemory(vulkanDevice->_device, uniformBuffer.memory, 0, sizeof(uniformBlock), 0, &uniformBuffer.mapped);
+}
+
+glTF::Mesh::~Mesh() {
+    vkDestroyBuffer(vulkanDevice->_device, uniformBuffer.buffer, nullptr);
+    vkFreeMemory(vulkanDevice->_device, uniformBuffer.memory, nullptr);
+}
+
+/*******************************************************************************************************************
+*                                             glTF Node
+********************************************************************************************************************/
+
+glm::mat4 glTF::Node::localMatrix()
+{
+    //multiply SRT order
+    return glm::translate(glm::mat4(1.0f), translation) * glm::mat4(rotation) * glm::scale(glm::mat4(1.0f), scale) * matrix;
+}
+
+glm::mat4 glTF::Node::getMatrix() {
+    glm::mat4 m = localMatrix();
+    Node* p = parent;
+    while (p) {
+        m = p->localMatrix() * m;
+        p = p->parent;
+    }
+    return m;
+}
+
+void glTF::Node::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view) {
+
+    if (mesh) {
+        glm::mat4 m = getMatrix();
+        //update skinning
+        memcpy(mesh->uniformBuffer.mapped, &m, VK_WHOLE_SIZE);
+    }
+}
+
+/*******************************************************************************************************************
+*                                             glTF Model
+********************************************************************************************************************/
+glTF::Model::Model() {
+
 }
 
 void glTF::Model::LoadImages(tinygltf::Model& input) {
@@ -471,12 +655,6 @@ void glTF::Model::LoadImages(tinygltf::Model& input) {
         texture.LoadglTFImages(image);
         _textures.push_back(texture);
     }
-}
-
-void glTF::Texture::Connect(VulkanDevice* device, VkQueue transQueue) {
-
-    vulkanDevice = device;
-    queue = transQueue;
 }
 
 glTF::Texture* glTF::Model::GetTexture(uint32_t index) {
@@ -534,38 +712,34 @@ void glTF::Model::LoadMaterials(tinygltf::Model& input) {
 }
 
 void glTF::Model::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
-    Node newNode{};
-    newNode.parent = parent;
-    newNode.matrix = glm::mat4(1.0f);
-    newNode.name = newNode.name;
+    Node* newNode{};
+    newNode->parent = parent;
+    newNode->matrix = glm::mat4(1.0f);
+    newNode->name = newNode->name;
 
-    //4×4行列に修正する
-    if (inputNode.scale.size() == 3) {
-        newNode.matrix = glm::scale(newNode.matrix, glm::vec3(glm::make_vec3(inputNode.scale.data())));
+    //4×4 matrix
+    if (inputNode.matrix.size() == 16) {
+        newNode->matrix = glm::make_mat4x4(inputNode.matrix.data());
     }
-
-    if (inputNode.translation.size() == 3) {
-        newNode.matrix = glm::translate(newNode.matrix, glm::vec3(glm::make_vec3(inputNode.translation.data())));
+    if (inputNode.scale.size() == 3) {
+        newNode->scale = glm::make_vec3(inputNode.scale.data());
     }
     if (inputNode.rotation.size() == 4) {
-        glm::quat q = glm::make_quat(inputNode.rotation.data());
-        newNode.matrix *= glm::mat4(q);
+        newNode->rotation = glm::make_quat(inputNode.rotation.data());
     }
-
-    if (inputNode.matrix.size() == 16) {
-        newNode.matrix = glm::make_mat4x4(inputNode.matrix.data());
+    if (inputNode.translation.size() == 3) {
+        newNode->translation = glm::make_vec3(inputNode.translation.data());
     }
 
     if (inputNode.children.size() > 0) {
         for (size_t i = 0; i < inputNode.children.size(); i++) {
-            LoadNode(input.nodes[inputNode.children[i]], input, &newNode, indexBuffer, vertexBuffer);
+            LoadNode(input.nodes[inputNode.children[i]], input, newNode, indexBuffer, vertexBuffer);
         }
     }
 
-    //ノードがメッシュデータを持っている場合
     if (inputNode.mesh > -1) {
         const tinygltf::Mesh mesh = input.meshes[inputNode.mesh];
-        Mesh* newMesh = new Mesh();
+        Mesh* newMesh = new Mesh(_vulkanDevice, newNode->matrix);
         newMesh->name = mesh.name;
 
         for (size_t i = 0; i < mesh.primitives.size(); i++) {
@@ -591,7 +765,7 @@ void glTF::Model::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Mode
                     const tinygltf::Accessor& accessor = input.accessors[primitive.attributes.find("POSITION")->second];
                     const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
                     positionBuffer = reinterpret_cast<const float*> (&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
-                    vertexCount = accessor.count;
+                    vertexCount = static_cast<uint32_t>(accessor.count);
                 }
 
                 if (primitive.attributes.find("NORMAL") != primitive.attributes.end()) {
@@ -627,7 +801,7 @@ void glTF::Model::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Mode
                         }
                     }
                     else {
-                        vert.color = glm::vec3(1.0f);
+                        vert.color = glm::vec4(1.0f);
                     }
                     vertexBuffer.push_back(vert);
                 }
@@ -674,14 +848,14 @@ void glTF::Model::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Mode
             }
             
             
-            Primitive* newPrimitive;
+            Primitive* newPrimitive = new Primitive(indexStart, indexCount, primitive.material > -1 ? _materials[primitive.material] : _materials.back());
             newPrimitive->firstVertex = vertexStart;
             newPrimitive->vertexCount = vertexCount;
             newPrimitive->firstIndex = indexStart;
             newPrimitive->indexCount = indexCount;
             newMesh->primitives.push_back(newPrimitive);
         }
-        newNode.mesh = newMesh;
+        newNode->mesh = newMesh;
     }
     if (parent) {
         parent->children.push_back(newNode);
@@ -689,13 +863,154 @@ void glTF::Model::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Mode
     else {
         _nodes.push_back(newNode);
     }
+    _linearNodes.push_back(newNode);
 }
 
 void glTF::Model::SetMemoryPropertyFlags(VkMemoryPropertyFlags memoryFlags) {
     memoryPropertyFlags = memoryFlags;
 }
 
-void glTF::Model::LoadFromFile(std::string filename) {
+void glTF::Model::CreateDescriptorPool() {
+
+    uint32_t imageCount = 0;
+    uint32_t uboCount = 0;
+
+    for (auto node : _linearNodes) {
+        if (node->mesh) {
+            uboCount++;
+        }
+    }
+
+    for (auto material : _materials) {
+        if (material.baseColorTexture != nullptr) {
+            imageCount++;
+        }
+    }
+
+    std::vector<VkDescriptorPoolSize> poolSizes{};
+    poolSizes.push_back({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , uboCount });
+
+    if (imageCount > 0) {
+        if (descriptorBidningFlags & DescriptorBindingFlags::ImageBaseColor) {
+            poolSizes.push_back({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER , imageCount });
+        }
+        if (descriptorBidningFlags & DescriptorBindingFlags::ImageNormalMap) {
+            poolSizes.push_back({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER , imageCount });
+        }
+    }
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = imageCount + uboCount;
+
+    if (vkCreateDescriptorPool(_vulkanDevice->_device, &poolInfo, nullptr, &_descriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor pool!");
+    }
+}
+
+void glTF::Model::CreateDescriptorSetLayout() {
+
+    //node uniform buffer
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo uboLayoutInfo{};
+    uboLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    uboLayoutInfo.bindingCount = 1;
+    uboLayoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(_vulkanDevice->_device, &uboLayoutInfo, nullptr, &_descriptorSetLayout.ubo) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor set layout!");
+    }
+
+    //material
+    std::vector<VkDescriptorSetLayoutBinding>samplerBindings{};
+    if (descriptorBidningFlags & DescriptorBindingFlags::ImageBaseColor) {
+        VkDescriptorSetLayoutBinding samplerBinding{};
+        samplerBinding.binding = static_cast<uint32_t>(samplerBindings.size());
+        samplerBinding.descriptorCount = 1;
+        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerBinding.pImmutableSamplers = nullptr;
+        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        samplerBindings.push_back(samplerBinding);
+    }
+    if (descriptorBidningFlags & DescriptorBindingFlags::ImageNormalMap) {
+        VkDescriptorSetLayoutBinding samplerBinding{};
+        samplerBinding.binding = static_cast<uint32_t>(samplerBindings.size());
+        samplerBinding.descriptorCount = 1;
+        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerBinding.pImmutableSamplers = nullptr;
+        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        samplerBindings.push_back(samplerBinding);
+    }
+
+    VkDescriptorSetLayoutCreateInfo imageLayoutInfo{};
+    imageLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    imageLayoutInfo.bindingCount = static_cast<uint32_t>(samplerBindings.size());
+    imageLayoutInfo.pBindings = samplerBindings.data();
+
+    if (vkCreateDescriptorSetLayout(_vulkanDevice->_device, &imageLayoutInfo, nullptr, &_descriptorSetLayout.image) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor set layout!");
+    }
+}
+
+void glTF::Model::CreateNodeDescriptorSets(glTF::Node* node) {
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = _descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &_descriptorSetLayout.ubo;
+    if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &node->mesh->uniformBuffer.descriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate descriptor sets!");
+    }
+
+    VkWriteDescriptorSet descriptorWrite{};
+    VkDescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = node->mesh->uniformBuffer.buffer;
+    bufferInfo.offset = 0;
+    bufferInfo.range = VK_WHOLE_SIZE;
+
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = node->mesh->uniformBuffer.descriptorSet;
+    descriptorWrite.dstBinding = 0;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pBufferInfo = &bufferInfo;
+
+    vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWrite, 0, nullptr);
+    
+    for (auto& child : node->children) {
+        CreateNodeDescriptorSets(child);
+    }
+}
+
+void glTF::Model::CreateDescriptorSets() {
+    
+    for (auto node : _nodes) {
+        CreateNodeDescriptorSets(node);
+    }
+    
+    //material
+    for (auto& material : _materials) {
+        material.createDescriptorSet(_vulkanDevice, _descriptorPool, _descriptorSetLayout.image);
+    }
+}
+
+void glTF::Model::CreateDescriptors() {
+    CreateDescriptorPool();
+    CreateDescriptorSetLayout();
+    CreateDescriptorSets();
+}
+
+void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) {
 
     tinygltf::Model glTFInput;
     tinygltf::TinyGLTF gltfContext;
@@ -722,6 +1037,34 @@ void glTF::Model::LoadFromFile(std::string filename) {
     else {
         throw std::runtime_error("failed to find glTF file!");
     }
+
+    
+    if (fileLoadingFlags & FileLoadingFlags::PreTransformVertices || fileLoadingFlags & FileLoadingFlags::PreMultiplyVertexColors || fileLoadingFlags & FileLoadingFlags::FlipY) {
+        for (Node* node : _linearNodes) {
+            if (node->mesh) {
+                const glm::mat4 localMatrix = node->getMatrix();
+                for (Primitive* primitive : node->mesh->primitives) {
+                    for (uint32_t i = 0; i < primitive->vertexCount; i++) {
+                        Vertex& vertex = vertexBuffer[primitive->firstVertex + i];
+
+                        if (fileLoadingFlags & FileLoadingFlags::PreTransformVertices) {
+                            vertex.pos = glm::vec3(localMatrix * glm::vec4(vertex.pos, 1.0f));
+                            vertex.normal = glm::normalize(glm::mat3(localMatrix) * vertex.normal);
+                        }
+                        if (fileLoadingFlags & FileLoadingFlags::FlipY) {
+                            vertex.pos.y *= -1.0f;
+                            vertex.normal.y *= -1.0f;
+                        }
+                        if (fileLoadingFlags & FileLoadingFlags::PreMultiplyVertexColors) {
+                            vertex.color = primitive->material.baseColorFactor * vertex.color;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
 
     //vertex buffer
     VkDeviceSize vertexBufferSize = vertexBuffer.size() * sizeof(Vertex);
@@ -782,239 +1125,85 @@ void glTF::Model::LoadFromFile(std::string filename) {
     vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
 
-    //uniform buffer
-    VkDeviceSize bufferSize = sizeof(UniformBlock);
-    _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _uniformBuffer.buffer, _uniformBuffer.memory);
-
-    vkMapMemory(_vulkanDevice->_device, _uniformBuffer.memory, 0, VK_WHOLE_SIZE, 0, &_uniformBuffer.mapped);
-    memcpy(_uniformBuffer.mapped, &_ubo, sizeof(_ubo));
-    vkUnmapMemory(_vulkanDevice->_device, _uniformBuffer.memory);
-}
-
-void glTF::Model::CreateDescriptorPool() {
-
-    uint32_t textureCount = 0;
-    uint32_t uboCount = 1;
-
-    std::vector<VkDescriptorPoolSize> poolSizes{};
-    poolSizes.push_back({ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , uboCount });
-    
-    for (auto texture : _textures) {
-        textureCount++;
-    }
-
-    if (textureCount > 0) {
-        poolSizes.push_back({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER , textureCount });
-    }
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-    poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = textureCount + uboCount;
-
-    if (vkCreateDescriptorPool(_vulkanDevice->_device, &poolInfo, nullptr, &_descriptorPool) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create descriptor pool!");
-    }
-}
-
-void glTF::Model::CreateDescriptorSetLayout() {
-
-    VkDescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.pImmutableSamplers = nullptr;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutCreateInfo uboLayoutInfo{};
-    uboLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    uboLayoutInfo.bindingCount = 1;
-    uboLayoutInfo.pBindings = &uboLayoutBinding;
-
-    if (vkCreateDescriptorSetLayout(_vulkanDevice->_device, &uboLayoutInfo, nullptr, &_descriptorSetLayout.matrix) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create descriptor set layout!");
-    }
-
-    VkDescriptorSetLayoutBinding samplerBinding{};
-    samplerBinding.binding = 0;
-    samplerBinding.descriptorCount = 1;
-    samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    samplerBinding.pImmutableSamplers = nullptr;
-    samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo imageLayoutInfo{};
-    imageLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    imageLayoutInfo.bindingCount = 1;
-    imageLayoutInfo.pBindings = &samplerBinding;
-
-    if (vkCreateDescriptorSetLayout(_vulkanDevice->_device, &imageLayoutInfo, nullptr, &_descriptorSetLayout.texture) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create descriptor set layout!");
-    }
-}
-
-void glTF::Model::CreateDescriptorSets() {
-
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = _descriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &_descriptorSetLayout.matrix;
-
-    if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &_uniformDescriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate descriptor sets!");
-    }
-
-    VkWriteDescriptorSet descriptorWrite{};
-
-    VkDescriptorBufferInfo bufferInfo{};
-    bufferInfo.buffer = _uniformBuffer.buffer;
-    bufferInfo.offset = 0;
-    bufferInfo.range = sizeof(UniformBlock);
-
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = _uniformDescriptorSet;
-    descriptorWrite.dstBinding = 0;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pBufferInfo = &bufferInfo;
-
-    vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWrite, 0, nullptr);
-    
-
-    //テクスチャ
-    for (auto& texture : _textures) {
-
-        VkDescriptorSetAllocateInfo allocInfoMaterial{};
-        allocInfoMaterial.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfoMaterial.descriptorPool = _descriptorPool;
-        allocInfoMaterial.descriptorSetCount = 1;
-        allocInfoMaterial.pSetLayouts = &_descriptorSetLayout.texture;
-
-        if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfoMaterial, &texture.descriptorSet) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate descriptor sets!");
-        }
-
-        VkDescriptorImageInfo imageInfo{};
-
-        imageInfo.imageView = texture.textureImageView;
-        imageInfo.sampler = texture.textureSampler;
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkWriteDescriptorSet descriptorWriteMaterial{};
-        descriptorWriteMaterial.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWriteMaterial.dstSet = texture.descriptorSet;
-        descriptorWriteMaterial.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWriteMaterial.dstBinding = 0;
-        descriptorWriteMaterial.pImageInfo = &imageInfo;
-        descriptorWriteMaterial.descriptorCount = 1;
-
-        vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &descriptorWriteMaterial, 0, nullptr);
-    }
-}
-
-void glTF::Model::CreateDescriptors() {
-    CreateDescriptorPool();
-    CreateDescriptorSetLayout();
-    CreateDescriptorSets();
+    CreateDescriptors();
 }
 
 void glTF::Model::Connect(VulkanDevice* device) {
     _vulkanDevice = device;
 }
 
-void glTF::Model::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node node)
+void glTF::Model::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node* node, uint32_t renderFlags, uint32_t bindImageSet)
 {
-
-    if (node.primitive.size() > 0) {
-
-        glm::mat4 nodeMatrix = node.matrix;
-        Node* currentParent = node.parent;
-        while (currentParent) {
-            nodeMatrix = currentParent->matrix * nodeMatrix;
-            currentParent = currentParent->parent;
+    if (node->mesh) {
+        for (Primitive* primitive : node->mesh->primitives) {
+            const glTF::Material& material = primitive->material;
+            bool skip = false;
+            if (renderFlags & RenderFlags::RenderOpaqueNodes) {
+                skip = (material.alphaMode != Material::ALPHA_OPAQUE);
+            }
+            if (renderFlags & RenderFlags::RenderAlphaMaskedNodes) {
+                skip = (material.alphaMode != Material::ALPHA_MASK);
+            }
+            if (renderFlags & RenderFlags::RenderAlphaBlendedNodes) {
+                skip = (material.alphaMode != Material::ALPHA_BLEND);
+            }
+            if (!skip) {
+                if (renderFlags & RenderFlags::BindImages) {
+                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, bindImageSet, 1, &material.descriptorSet, 0, nullptr);
+                }
+                vkCmdDrawIndexed(commandBuffer, primitive->indexCount, 1, primitive->firstIndex, 0, 0);
+            }
         }
-
-        //vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &nodeMatrix);
-
-        for (Primitive& primitive : node.primitive) {
-            const Material& material = primitive.material;
-            //if (primitive.indexCount > 0) {
-            //    uint32_t index = _textureIndices[_materials[primitive.materialIndex].textureIndex];
-            //    //現在のプリミティブのテクスチャにディスクリプタをバインドする
-            //    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &_textures[index].descriptorSet, 0, nullptr);
-            //    vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
-            //}
-
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &material.descriptorSet, 0, nullptr);
-
-        }
-
     }
 
-    for (auto& child : node.children) {
-        DrawNode(commandBuffer, pipelineLayout, child);
+    for (auto& child : node->children) {
+        DrawNode(commandBuffer, pipelineLayout, child, renderFlags, bindImageSet);
     }
 }
 
-void glTF::Model::Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout) {
+void glTF::Model::Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, uint32_t renderFlags, uint32_t bindImageSet) {
     //モデル描画
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &_vertices.buffer, offsets);
     vkCmdBindIndexBuffer(commandBuffer, _indices.buffer, 0, VK_INDEX_TYPE_UINT32);
 
     for (auto& node : _nodes) {
-        DrawNode(commandBuffer, pipelineLayout, node);
+        DrawNode(commandBuffer, pipelineLayout, node, renderFlags, bindImageSet);
     }
 }
 
-void glTF::Model::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view) {
-
-    _ubo.projection = projection;
-    _ubo.model = view;
-
-    memcpy(_uniformBuffer.mapped, &_ubo, sizeof(_ubo));
-}
-
 void glTF::Model::Recreate() {
-    //uniform buffer
-    VkDeviceSize bufferSize = sizeof(UniformBlock);
-    _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _uniformBuffer.buffer, _uniformBuffer.memory);
-    CreateDescriptorPool();
-    CreateDescriptorSets();
 }
 
 void glTF::Model::Cleanup() {
-    vkDestroyBuffer(_vulkanDevice->_device, _uniformBuffer.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, _uniformBuffer.memory, nullptr);
-    vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
+
 }
 
 void glTF::Model::Destroy() {
     
-    for (auto texture : _textures) {
-        vkDestroySampler(_vulkanDevice->_device, texture.textureSampler, nullptr);
-        vkDestroyImageView(_vulkanDevice->_device, texture.textureImageView, nullptr);
-        vkDestroyImage(_vulkanDevice->_device, texture.textureImage, nullptr);
-        vkFreeMemory(_vulkanDevice->_device, texture.textureImageMemory, nullptr);
-    }
-
-    vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout.matrix, nullptr);
-    vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout.texture, nullptr);
-
     vkDestroyBuffer(_vulkanDevice->_device, _vertices.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, _vertices.memory, nullptr);
-
     vkDestroyBuffer(_vulkanDevice->_device, _indices.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, _indices.memory, nullptr);
+
+    for (auto texture : _textures) {
+        texture.Destroy();
+    }
+    for (auto node : _nodes) {
+        delete node;
+    }
+    vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout.ubo, nullptr);
+    vkDestroyDescriptorSetLayout(_vulkanDevice->_device, _descriptorSetLayout.image, nullptr);
+
+    vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
+
 }
 
 glTF::Model* glTF::Model::GetglTF() {
-    if (s_gltf == nullptr) {
-        s_gltf = new Model();
+    if (s_model == nullptr) {
+        s_model = new Model();
     }
-    return s_gltf;
+    return s_model;
 }
 
 /*******************************************************************************************************************
@@ -1363,8 +1552,8 @@ void AppBase::CreateGraphicsPipeline() {
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    auto bindingDescription = Model::Vertex::getBindingDescription();
-    auto attributeDescriptions = Model::Vertex::getAttributeDescriptions();
+    auto bindingDescription = glTF::Vertex::getBindingDescription();
+    auto attributeDescriptions = glTF::Vertex::getAttributeDescriptions();
 
     vertexInputInfo.vertexBindingDescriptionCount = 1;
     vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
@@ -1440,7 +1629,7 @@ void AppBase::CreateGraphicsPipeline() {
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     
-    std::array<VkDescriptorSetLayout, 2> bindings = { s_gltf->_descriptorSetLayout.matrix, s_gltf->_descriptorSetLayout.texture };
+    std::array<VkDescriptorSetLayout, 2> bindings = { glTF::_descriptorSetLayout.ubo, glTF::_descriptorSetLayout.image };
 
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t> (bindings.size());
@@ -1719,7 +1908,7 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
         }
         
-        s_gltf->Draw(_commandBuffers[i], _pipelineLayout);
+        //s_model->Draw(_commandBuffers[i], _pipelineLayout);
 
         vkCmdEndRenderPass(_commandBuffers[i]);
 
@@ -1780,11 +1969,11 @@ void AppBase::Initialize() {
     _camera->setTranslation(glm::vec3(0.0f, 100.5f, -2.0f));
     
     //load gltf model
-    Model::GetglTF();
-    s_gltf->Connect(_vulkanDevice);
-    s_gltf->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    s_gltf->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf");
-    s_gltf->CreateDescriptors();
+    glTF::Model::GetglTF();
+    s_model->Connect(_vulkanDevice);
+    s_model->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
+    s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
 
     InitRayTracing();
 
@@ -1868,11 +2057,11 @@ void AppBase::CreateBLAS() {
     VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
     VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
     //デバイスアドレスを取得
-    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(s_gltf->_vertices.buffer);
-    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(s_gltf->_indices.buffer);
+    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(s_model->_vertices.buffer);
+    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(s_model->_indices.buffer);
     
-    uint32_t numTriangles = static_cast<uint32_t>(s_gltf->_indices.count) / 3;
-    uint32_t maxVertex = s_gltf->_vertices.count;
+    uint32_t numTriangles = static_cast<uint32_t>(s_model->_indices.count) / 3;
+    uint32_t maxVertex = s_model->_vertices.count;
 
     VkAccelerationStructureGeometryKHR geometryInfo{};
     geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -1882,7 +2071,7 @@ void AppBase::CreateBLAS() {
     geometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     geometryInfo.geometry.triangles.vertexData = vertexBufferDeviceAddress;
     geometryInfo.geometry.triangles.maxVertex = maxVertex;
-    geometryInfo.geometry.triangles.vertexStride = sizeof(Model::Vertex);
+    geometryInfo.geometry.triangles.vertexStride = sizeof(glTF::Vertex);
     geometryInfo.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
     geometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
     geometryInfo.geometry.triangles.transformData.deviceAddress = 0;
@@ -2095,7 +2284,7 @@ void AppBase::UpdateUniformBuffer() {
     _uniformData.projInverse = glm::inverse(_camera->matrix.perspective);
     _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
     _uniformData.lightPos = glm::vec4(cos(glm::radians(timer * 360.0f)) * 40.0f, -50.0f + sin(glm::radians(timer * 360.0f)) * 20.0f, 25.0f + sin(glm::radians(timer * 360.0f)) * 5.0f, 0.0f);
-    _uniformData.vertexSize = sizeof(Model::Vertex);
+    _uniformData.vertexSize = sizeof(glTF::Vertex);
     memcpy(r_ubo.mapped, &_uniformData, sizeof(_uniformData));
 }
 
@@ -2362,7 +2551,7 @@ void AppBase::CreateDescriptorSets() {
     writeDescriptorSet[2].pBufferInfo = &bufferInfo;
 
     VkDescriptorBufferInfo vertexBufferInfo{};
-    vertexBufferInfo.buffer = s_gltf->_vertices.buffer;
+    vertexBufferInfo.buffer = s_model->_vertices.buffer;
     vertexBufferInfo.offset = 0;
     vertexBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -2374,7 +2563,7 @@ void AppBase::CreateDescriptorSets() {
     writeDescriptorSet[3].pBufferInfo = &vertexBufferInfo;
 
     VkDescriptorBufferInfo indexBufferInfo{};
-    indexBufferInfo.buffer = s_gltf->_indices.buffer;
+    indexBufferInfo.buffer = s_model->_indices.buffer;
     indexBufferInfo.offset = 0;
     indexBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -2428,7 +2617,7 @@ void AppBase::RecreateSwapChain() {
     CreateGraphicsPipeline();
     CreateDepthResources();
     CreateFramebuffers();
-    s_gltf->Recreate();
+    s_model->Recreate();
     CreateCommandBuffers();
     BuildCommandBuffers(true);
 
@@ -2630,7 +2819,7 @@ void AppBase::CleanupSwapchain() {
     //vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
     //vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
-    s_gltf->Cleanup();
+    s_model->Cleanup();
 }
 
 void AppBase::Destroy() {
@@ -2638,7 +2827,7 @@ void AppBase::Destroy() {
     CleanupSwapchain();
    
     //raytracing
-    s_gltf->Destroy();
+    s_model->Destroy();
     r_instanceBuffer.Destroy(_vulkanDevice->_device);
     r_ubo.Destroy(_vulkanDevice->_device);
     r_raygenShaderBindingTable.Destroy(_vulkanDevice->_device);
@@ -2680,6 +2869,6 @@ void AppBase::Destroy() {
     delete _vulkanDevice;
     delete _swapchain;
     delete _shader;
-    delete s_gltf;
+    delete s_model;
     delete _camera;
 }
