@@ -10,73 +10,13 @@
 *                                             glTF
 ********************************************************************************************************************/
 
-class glTF {
-public:
-
-    struct Vertices {
-        VkBuffer buffer;
-        VkDeviceMemory memory;
-        int count;
-    };
-
-    struct Indices {
-        int count;
-        VkBuffer buffer;
-        VkDeviceMemory memory;
-    };
-
-    struct Vertex {
-
-        glm::vec3 pos;
-        glm::vec3 normal;
-        glm::vec2 uv;
-        glm::vec3 color;
-
-        static VkVertexInputBindingDescription getBindingDescription() {
-            VkVertexInputBindingDescription bindingDescription{};
-            bindingDescription.binding = 0;
-            bindingDescription.stride = sizeof(Vertex);
-            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-            return bindingDescription;
-        }
-
-
-        static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
-
-            std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
-
-            attributeDescriptions[0].binding = 0;
-            attributeDescriptions[0].location = 0;
-            attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-            attributeDescriptions[1].binding = 0;
-            attributeDescriptions[1].location = 1;
-            attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[1].offset = offsetof(Vertex, normal);
-
-            attributeDescriptions[2].binding = 0;
-            attributeDescriptions[2].location = 2;
-            attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[2].offset = offsetof(Vertex, uv);
-
-            attributeDescriptions[3].binding = 0;
-            attributeDescriptions[3].location = 3;
-            attributeDescriptions[3].format = VK_FORMAT_R32G32B32_SFLOAT;
-            attributeDescriptions[3].offset = offsetof(Vertex, color);
-
-            return attributeDescriptions;
-        }
-    };
+namespace glTF {
 
     struct Texture {
         VkImage textureImage;
         VkDeviceMemory textureImageMemory;
         VkImageView textureImageView;
         VkSampler textureSampler;
-        VkDescriptorSet descriptorSet;
-
         VulkanDevice* vulkanDevice;
         uint32_t mipLevel;
         VkQueue queue;
@@ -117,154 +57,242 @@ public:
         void Connect(VulkanDevice* device, VkQueue transQueue);
     };
 
-    struct glTFMaterial {
-        glm::vec4 baseColorFactor = glm::vec4(1.0f);
-        uint32_t textureIndex;
+    class Model {
+    public:
+
+        struct Vertices {
+            VkBuffer buffer;
+            VkDeviceMemory memory;
+            int count;
+        };
+
+        struct Indices {
+            int count;
+            VkBuffer buffer;
+            VkDeviceMemory memory;
+        };
+
+        struct Vertex {
+
+            glm::vec3 pos;
+            glm::vec3 normal;
+            glm::vec2 uv;
+            glm::vec3 color;
+
+            static VkVertexInputBindingDescription getBindingDescription() {
+                VkVertexInputBindingDescription bindingDescription{};
+                bindingDescription.binding = 0;
+                bindingDescription.stride = sizeof(Vertex);
+                bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+                return bindingDescription;
+            }
+
+
+            static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
+
+                std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
+
+                attributeDescriptions[0].binding = 0;
+                attributeDescriptions[0].location = 0;
+                attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+                attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+                attributeDescriptions[1].binding = 0;
+                attributeDescriptions[1].location = 1;
+                attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+                attributeDescriptions[1].offset = offsetof(Vertex, normal);
+
+                attributeDescriptions[2].binding = 0;
+                attributeDescriptions[2].location = 2;
+                attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+                attributeDescriptions[2].offset = offsetof(Vertex, uv);
+
+                attributeDescriptions[3].binding = 0;
+                attributeDescriptions[3].location = 3;
+                attributeDescriptions[3].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+                attributeDescriptions[3].offset = offsetof(Vertex, color);
+
+                return attributeDescriptions;
+            }
+        };
+        
+        struct Material {
+            glTF::Texture* baseColorTexture = nullptr;
+            glTF::Texture* metallicRoughnessTexture = nullptr;
+            glTF::Texture* normalTexture = nullptr;
+            glTF::Texture* occlusionTexture = nullptr;
+            glTF::Texture* emissiveTexture = nullptr;
+            //glTF::Texture* specularGlossinessTexture;
+            //glTF::Texture* diffuseTexture;
+
+            glm::vec4 baseColorFactor = glm::vec4(1.0f);
+            float roughnessFactor = 1.0f;
+            float metallicFactor = 1.0f;
+
+            enum AlphaMode { ALPHA_OPEQUE, ALPHA_MASK, ALPHA_BLEND };
+            AlphaMode alphaMode = ALPHA_OPAQUE;
+            float alphaCutoff = 1.0f;
+
+            VkDescriptorSet descriptorSet;
+        };
+
+        struct Primitive {
+            uint32_t firstIndex;
+            uint32_t indexCount;
+            int32_t materialIndex;
+            Material& material;
+        };
+
+        struct UniformBlock {
+            glm::mat4 projection;
+            glm::mat4 model;
+            glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, -5.0f, 1.0f);
+        }_ubo;
+
+        struct Node {
+            Node* parent;
+            std::vector<Node> children;
+            std::vector<Primitive> primitive;
+            glm::mat4 matrix;
+        };
+
+        struct DescriptorLayouts {
+            VkDescriptorSetLayout matrix;
+            VkDescriptorSetLayout texture;
+        };
+
+
+        Model();
+        ~Model() {};
+
+    public:
+
+        /**
+        * @brief    コピーコンストラクタの禁止
+        */
+        Model(const Model&);
+        Model& operator=(const Model&);
+
+
+        void LoadImages(tinygltf::Model& gltfModel);
+
+        /**
+        * @brief    テクスチャを取得する
+        */
+        Texture* GetTexture(uint32_t index);
+        
+        /**
+        * @brief    マテリアルをロードする
+        */
+        void LoadMaterials(tinygltf::Model& input);
+
+
+        void LoadTextureIndices(tinygltf::Model& input);
+        void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
+        /**
+        * @brief    メモリフラグの指定
+        */
+        void SetMemoryPropertyFlags(VkMemoryPropertyFlags memoryFlags);
+
+        /**
+        * @brief    glTFファイルを読み込む
+        */
+        void LoadFromFile(std::string filename);
+
+        /**
+        * @brief    ディスクリプタプールの作成
+        */
+        void CreateDescriptorPool();
+
+        /**
+        * @brief    ディスクリプタレイアウトの作成
+        */
+        void CreateDescriptorSetLayout();
+
+        /**
+        * @brief    ディスクリプタセットを作成する
+        */
+        void CreateDescriptorSets();
+
+        /**
+        * @brief    ディスクリプタ関連の作成
+        */
+        void CreateDescriptors();
+
+        /**
+        * @brief    初期化
+        */
+        void Connect(VulkanDevice* device);
+
+        /**
+        * @brief    ノード描画
+        */
+        void DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node node);
+
+        /**
+        * @brief    モデル描画
+        */
+        void Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout);
+
+        /**
+        * @brief    ユニフォームバッファの更新
+        */
+        void UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view);
+
+        /**
+        * @brief    再構成
+        */
+        void Recreate();
+
+        /**
+        * @brief    クリーン
+        */
+        void Cleanup();
+
+        /**
+        * @brief    破棄
+        */
+        void Destroy();
+
+        /**
+        * @brief    自インスタンスの取得
+        */
+        static Model* GetglTF();
+
+
+
+        DescriptorLayouts _descriptorSetLayout;
+        VkDescriptorSet _uniformDescriptorSet;
+        VkMemoryPropertyFlags memoryPropertyFlags;
+        Vertices _vertices;
+        Indices _indices;
+        Initializers::Buffer _uniformBuffer;
+
+    private:
+        std::vector<Texture> _textures;
+        std::vector<uint32_t> _textureIndices;
+        std::vector<Node> _nodes;
+        std::vector<Material> _materials;
+
+
+        VulkanDevice* _vulkanDevice;
+
+        uint32_t _mipLevel;
+
+        VkDescriptorPool _descriptorPool;
+
     };
-
-    struct Primitive {
-        uint32_t firstIndex;
-        uint32_t indexCount;
-        int32_t materialIndex;
-    };
-
-    struct UniformBlock {
-        glm::mat4 projection;
-        glm::mat4 model;
-        glm::vec4 lightPos = glm::vec4(5.0f, 5.0f, -5.0f, 1.0f);
-    }_ubo;
-
-    struct Node {
-        Node* parent;
-        std::vector<Node> children;
-        std::vector<Primitive> primitive;
-        glm::mat4 matrix;
-    };
-
-    struct DescriptorLayouts {
-        VkDescriptorSetLayout matrix;
-        VkDescriptorSetLayout texture;
-    };
-
-
-    glTF();
-    ~glTF() {};
-
-public:
-
-    /**
-    * @brief    コピーコンストラクタの禁止
-    */
-    glTF(const glTF&);
-    glTF& operator=(const glTF&);
-
-
-    void LoadImages(tinygltf::Model& gltfModel);
-    void LoadglTFMaterials(tinygltf::Model& input);
-    void LoadTextureIndices(tinygltf::Model& input);
-    void LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer);
-    /**
-    * @brief    メモリフラグの指定
-    */
-    void SetMemoryPropertyFlags(VkMemoryPropertyFlags memoryFlags);
-
-    /**
-    * @brief    glTFファイルを読み込む
-    */
-    void LoadFromFile(std::string filename);
-
-    /**
-    * @brief    ディスクリプタプールの作成
-    */
-    void CreateDescriptorPool();
-
-    /**
-    * @brief    ディスクリプタレイアウトの作成
-    */
-    void CreateDescriptorSetLayout();
-
-    /**
-    * @brief    ディスクリプタセットを作成する
-    */
-    void CreateDescriptorSets();
-
-    /**
-    * @brief    ディスクリプタ関連の作成
-    */
-    void CreateDescriptors();
-
-    /**
-    * @brief    初期化
-    */
-    void Connect(VulkanDevice* device);
-
-    /**
-    * @brief    ノード描画
-    */
-    void DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node node);
-
-    /**
-    * @brief    モデル描画
-    */
-    void Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout);
-
-    /**
-    * @brief    ユニフォームバッファの更新
-    */
-    void UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view);
-
-    /**
-    * @brief    再構成
-    */
-    void Recreate();
-
-    /**
-    * @brief    クリーン
-    */
-    void Cleanup();
-
-    /**
-    * @brief    破棄
-    */
-    void Destroy();
-
-    /**
-    * @brief    自インスタンスの取得
-    */
-    static glTF* GetglTF();
-
-
-
-    DescriptorLayouts _descriptorSetLayout;
-    VkDescriptorSet _uniformDescriptorSet;
-    VkMemoryPropertyFlags memoryPropertyFlags;
-    Vertices _vertices;
-    Indices _indices;
-    Initializers::Buffer _uniformBuffer;
-
-private:
-    std::vector<Texture> _textures;
-    std::vector<uint32_t> _textureIndices;
-    std::vector<glTFMaterial> _materials;
-    std::vector<Node> _nodes;
-
-
-
-    VulkanDevice* _vulkanDevice;
-
-    uint32_t _mipLevel;
-
-    VkDescriptorPool _descriptorPool;
-
-};
-
-namespace {
-    //シングルトン
-    glTF* s_gltf = nullptr;
 
 }
 
-glTF::glTF() {
+namespace {
+    //シングルトン
+    glTF::Model* s_gltf = nullptr;
+
+}
+
+glTF::Model::Model() {
 
 }
 
@@ -430,7 +458,7 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage) {
     }
 }
 
-void glTF::LoadImages(tinygltf::Model& input) {
+void glTF::Model::LoadImages(tinygltf::Model& input) {
     for (tinygltf::Image& image : input.images) {
         Texture texture;
         texture.Connect(_vulkanDevice, _vulkanDevice->_queue);
@@ -445,32 +473,68 @@ void glTF::Texture::Connect(VulkanDevice* device, VkQueue transQueue) {
     queue = transQueue;
 }
 
-void glTF::LoadglTFMaterials(tinygltf::Model& input) {
-
-    _materials.resize(input.materials.size());
-
-    for (size_t i = 0; i < input.materials.size(); i++) {
-        tinygltf::Material material = input.materials[i];
-        //baseColor
-        if (material.values.find("baseColorFactor") != material.values.end()) {
-            _materials[i].baseColorFactor = glm::make_vec4(material.values["baseColorFactor"].ColorFactor().data());
-
-        }
-        //texture
-        if (material.values.find("baseColorTexture") != material.values.end()) {
-            _materials[i].textureIndex = material.values["baseColorTexture"].TextureIndex();
-        }
+glTF::Texture* glTF::Model::GetTexture(uint32_t index) {
+    if (index < _textures.size()) {
+        return &_textures[index];
     }
+    return nullptr;
 }
 
-void glTF::LoadTextureIndices(tinygltf::Model& input) {
+void glTF::Model::LoadMaterials(tinygltf::Model& input) {
+
+    for (tinygltf::Material& mat : input.materials) {
+        Material material;
+        if (mat.values.find("baseColorTexture") != mat.values.end()) {
+            material.baseColorTexture = GetTexture(input.textures[mat.values["baseColorTexture"].TextureIndex()].source);
+        }
+        if (mat.values.find("metallicRoughnessTexture") != mat.values.end()) {
+            material.metallicRoughnessTexture = GetTexture(input.textures[mat.values["metallicRoughnessTexture"].TextureIndex()].source);
+        }
+        if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end()) {
+            material.normalTexture = GetTexture(input.textures[mat.additionalValues["normalTexture"].TextureIndex()].source);
+        }
+        if (mat.additionalValues.find("occlusionTexture") != mat.additionalValues.end()) {
+            material.occlusionTexture = GetTexture(input.textures[mat.additionalValues["occlusionTexture"].TextureIndex()].source);
+        }
+        if (mat.additionalValues.find("emissiveTexture") != mat.additionalValues.end()) {
+            material.emissiveTexture = GetTexture(input.textures[mat.additionalValues["emissiveTexture"].TextureIndex()].source);
+        }
+
+        if (mat.values.find("baseColorFactor") != mat.values.end()) {
+            material.baseColorFactor = glm::make_vec4(mat.values["baseColorFactor"].ColorFactor().data());
+        }
+        if (mat.values.find("roughnessFactor") != mat.values.end()) {
+            material.roughnessFactor = static_cast<float>(mat.values["roughnessFactor"].Factor());
+        }
+        if (mat.values.find("metallicFactor") != mat.values.end()) {
+            material.metallicFactor = static_cast<float>(mat.values["metallicFactor"].Factor());
+        }
+        if (mat.additionalValues.find("alphaMode") != mat.additionalValues.end()) {
+            tinygltf::Parameter param = mat.additionalValues["alphaMode"];
+            if (param.string_value == "BLEND") {
+                material.alphaMode = Material::ALPHA_BLEND;
+            }
+            if (param.string_value == "MASK") {
+                material.alphaMode = Material::ALPHA_MASK;
+            }
+        }
+        if (mat.additionalValues.find("alphaCutoff") != mat.additionalValues.end()) {
+            material.alphaCutoff = static_cast<float>(mat.additionalValues["alphaCotoff"].Factor());
+        }
+
+        _materials.push_back(material);
+    }
+
+}
+
+void glTF::Model::LoadTextureIndices(tinygltf::Model& input) {
     _textureIndices.resize(input.textures.size());
     for (uint32_t i = 0; i < input.textures.size(); i++) {
         _textureIndices[i] = input.textures[i].source;
     }
 }
 
-void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
+void glTF::Model::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
     Node node{};
     node.matrix = glm::mat4(1.0f);
 
@@ -593,11 +657,11 @@ void glTF::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& inpu
     }
 }
 
-void glTF::SetMemoryPropertyFlags(VkMemoryPropertyFlags memoryFlags) {
+void glTF::Model::SetMemoryPropertyFlags(VkMemoryPropertyFlags memoryFlags) {
     memoryPropertyFlags = memoryFlags;
 }
 
-void glTF::LoadFromFile(std::string filename) {
+void glTF::Model::LoadFromFile(std::string filename) {
 
     tinygltf::Model glTFInput;
     tinygltf::TinyGLTF gltfContext;
@@ -610,7 +674,7 @@ void glTF::LoadFromFile(std::string filename) {
 
     if (fileLoaded) {
         LoadImages(glTFInput);
-        LoadglTFMaterials(glTFInput);
+        LoadMaterials(glTFInput);
         LoadTextureIndices(glTFInput);
         const tinygltf::Scene& scene = glTFInput.scenes[0];
         for (size_t i = 0; i < scene.nodes.size(); i++) {
@@ -690,7 +754,7 @@ void glTF::LoadFromFile(std::string filename) {
     vkUnmapMemory(_vulkanDevice->_device, _uniformBuffer.memory);
 }
 
-void glTF::CreateDescriptorPool() {
+void glTF::Model::CreateDescriptorPool() {
 
     uint32_t textureCount = 0;
     uint32_t uboCount = 1;
@@ -717,7 +781,7 @@ void glTF::CreateDescriptorPool() {
     }
 }
 
-void glTF::CreateDescriptorSetLayout() {
+void glTF::Model::CreateDescriptorSetLayout() {
 
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
     uboLayoutBinding.binding = 0;
@@ -752,7 +816,7 @@ void glTF::CreateDescriptorSetLayout() {
     }
 }
 
-void glTF::CreateDescriptorSets() {
+void glTF::Model::CreateDescriptorSets() {
 
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -813,17 +877,17 @@ void glTF::CreateDescriptorSets() {
     }
 }
 
-void glTF::CreateDescriptors() {
+void glTF::Model::CreateDescriptors() {
     CreateDescriptorPool();
     CreateDescriptorSetLayout();
     CreateDescriptorSets();
 }
 
-void glTF::Connect(VulkanDevice* device) {
+void glTF::Model::Connect(VulkanDevice* device) {
     _vulkanDevice = device;
 }
 
-void glTF::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node node)
+void glTF::Model::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout, Node node)
 {
 
     if (node.primitive.size() > 0) {
@@ -835,16 +899,21 @@ void glTF::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLa
             currentParent = currentParent->parent;
         }
 
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &nodeMatrix);
+        //vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &nodeMatrix);
 
         for (Primitive& primitive : node.primitive) {
-            if (primitive.indexCount > 0) {
-                uint32_t index = _textureIndices[_materials[primitive.materialIndex].textureIndex];
-                //現在のプリミティブのテクスチャにディスクリプタをバインドする
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &_textures[index].descriptorSet, 0, nullptr);
-                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
-            }
+            const Material& material = primitive.material;
+            //if (primitive.indexCount > 0) {
+            //    uint32_t index = _textureIndices[_materials[primitive.materialIndex].textureIndex];
+            //    //現在のプリミティブのテクスチャにディスクリプタをバインドする
+            //    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &_textures[index].descriptorSet, 0, nullptr);
+            //    vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
+            //}
+
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &material.descriptorSet, 0, nullptr);
+
         }
+
     }
 
     for (auto& child : node.children) {
@@ -852,7 +921,7 @@ void glTF::DrawNode(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLa
     }
 }
 
-void glTF::Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout) {
+void glTF::Model::Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout) {
     //モデル描画
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &_vertices.buffer, offsets);
@@ -863,7 +932,7 @@ void glTF::Draw(VkCommandBuffer& commandBuffer, VkPipelineLayout& pipelineLayout
     }
 }
 
-void glTF::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view) {
+void glTF::Model::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view) {
 
     _ubo.projection = projection;
     _ubo.model = view;
@@ -871,7 +940,7 @@ void glTF::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view) {
     memcpy(_uniformBuffer.mapped, &_ubo, sizeof(_ubo));
 }
 
-void glTF::Recreate() {
+void glTF::Model::Recreate() {
     //uniform buffer
     VkDeviceSize bufferSize = sizeof(UniformBlock);
     _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _uniformBuffer.buffer, _uniformBuffer.memory);
@@ -879,13 +948,13 @@ void glTF::Recreate() {
     CreateDescriptorSets();
 }
 
-void glTF::Cleanup() {
+void glTF::Model::Cleanup() {
     vkDestroyBuffer(_vulkanDevice->_device, _uniformBuffer.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, _uniformBuffer.memory, nullptr);
     vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
 }
 
-void glTF::Destroy() {
+void glTF::Model::Destroy() {
     
     for (auto texture : _textures) {
         vkDestroySampler(_vulkanDevice->_device, texture.textureSampler, nullptr);
@@ -904,9 +973,9 @@ void glTF::Destroy() {
     vkFreeMemory(_vulkanDevice->_device, _indices.memory, nullptr);
 }
 
-glTF* glTF::GetglTF() {
+glTF::Model* glTF::Model::GetglTF() {
     if (s_gltf == nullptr) {
-        s_gltf = new glTF();
+        s_gltf = new Model();
     }
     return s_gltf;
 }
@@ -1257,8 +1326,8 @@ void AppBase::CreateGraphicsPipeline() {
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    auto bindingDescription = glTF::Vertex::getBindingDescription();
-    auto attributeDescriptions = glTF::Vertex::getAttributeDescriptions();
+    auto bindingDescription = Model::Vertex::getBindingDescription();
+    auto attributeDescriptions = Model::Vertex::getAttributeDescriptions();
 
     vertexInputInfo.vertexBindingDescriptionCount = 1;
     vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
@@ -1334,7 +1403,7 @@ void AppBase::CreateGraphicsPipeline() {
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     
-    std::array<VkDescriptorSetLayout, 2> bindings = { glTF::GetglTF()->_descriptorSetLayout.matrix, glTF::GetglTF()->_descriptorSetLayout.texture };
+    std::array<VkDescriptorSetLayout, 2> bindings = { s_gltf->_descriptorSetLayout.matrix, s_gltf->_descriptorSetLayout.texture };
 
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t> (bindings.size());
@@ -1593,7 +1662,7 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             1
         );
 
-                VkRenderPassBeginInfo renderPassInfo{};
+        VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderPassInfo.renderPass = _renderPass;
         renderPassInfo.framebuffer = _frameBuffers[i];
@@ -1601,7 +1670,7 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
         renderPassInfo.renderArea.extent = _swapchain->_extent;
 
         std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.0f, 0.f, 0.f, 1.0f} };
+        clearValues[0].color = { {0.0f, 0.f, 0.2f, 1.0f} };
         clearValues[1].depthStencil = { 1.0f, 0 };
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -1613,6 +1682,8 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
         }
         
+        s_gltf->Draw(_commandBuffers[i], _pipelineLayout);
+
         vkCmdEndRenderPass(_commandBuffers[i]);
 
         if (vkEndCommandBuffer(_commandBuffers[i]) != VK_SUCCESS) {
@@ -1669,8 +1740,15 @@ void AppBase::Initialize() {
     _camera->type = Camera::CameraType::firstperson;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 512.0f);
-    _camera->setTranslation(glm::vec3(0.0f, 0.5f, -2.0f));
+    _camera->setTranslation(glm::vec3(0.0f, 100.5f, -2.0f));
     
+    //load gltf model
+    Model::GetglTF();
+    s_gltf->Connect(_vulkanDevice);
+    s_gltf->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    s_gltf->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf");
+    s_gltf->CreateDescriptors();
+
     InitRayTracing();
 
     InitializeGUI();
@@ -1749,21 +1827,15 @@ AppBase::RayTracingScratchBuffer AppBase::CreateScratchBuffer(VkDeviceSize size)
 }
 
 void AppBase::CreateBLAS() {
-
-    //load gltf model
-    auto _glTF = glTF::GetglTF();
-    _glTF->Connect(_vulkanDevice);
-    _glTF->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    _glTF->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf");
     
     VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
     VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
     //デバイスアドレスを取得
-    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_glTF->_vertices.buffer);
-    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(_glTF->_indices.buffer);
+    vertexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(s_gltf->_vertices.buffer);
+    indexBufferDeviceAddress.deviceAddress = GetBufferDeviceAddress(s_gltf->_indices.buffer);
     
-    uint32_t numTriangles = static_cast<uint32_t>(_glTF->_indices.count) / 3;
-    uint32_t maxVertex = _glTF->_vertices.count;
+    uint32_t numTriangles = static_cast<uint32_t>(s_gltf->_indices.count) / 3;
+    uint32_t maxVertex = s_gltf->_vertices.count;
 
     VkAccelerationStructureGeometryKHR geometryInfo{};
     geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -1773,7 +1845,7 @@ void AppBase::CreateBLAS() {
     geometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     geometryInfo.geometry.triangles.vertexData = vertexBufferDeviceAddress;
     geometryInfo.geometry.triangles.maxVertex = maxVertex;
-    geometryInfo.geometry.triangles.vertexStride = sizeof(glTF::Vertex);
+    geometryInfo.geometry.triangles.vertexStride = sizeof(Model::Vertex);
     geometryInfo.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
     geometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
     geometryInfo.geometry.triangles.transformData.deviceAddress = 0;
@@ -1986,7 +2058,7 @@ void AppBase::UpdateUniformBuffer() {
     _uniformData.projInverse = glm::inverse(_camera->matrix.perspective);
     _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
     _uniformData.lightPos = glm::vec4(cos(glm::radians(timer * 360.0f)) * 40.0f, -50.0f + sin(glm::radians(timer * 360.0f)) * 20.0f, 25.0f + sin(glm::radians(timer * 360.0f)) * 5.0f, 0.0f);
-    _uniformData.vertexSize = sizeof(glTF::Vertex);
+    _uniformData.vertexSize = sizeof(Model::Vertex);
     memcpy(r_ubo.mapped, &_uniformData, sizeof(_uniformData));
 }
 
@@ -2074,6 +2146,19 @@ void AppBase::CreateRaytracingPipeline() {
     r_shaderGroups.push_back(raygenShaderGroup);
     stages.push_back(rgStage);
     
+    VkSpecializationMapEntry specializationMapEntry{};
+    specializationMapEntry.constantID = 0;
+    specializationMapEntry.offset = 0;
+    specializationMapEntry.size = sizeof(uint32_t);
+
+    uint32_t maxRecursion = 4;
+    VkSpecializationInfo specializationInfo{};
+    specializationInfo.mapEntryCount = 1;
+    specializationInfo.pMapEntries = &specializationMapEntry;
+    specializationInfo.dataSize = sizeof(maxRecursion);
+    specializationInfo.pData = &maxRecursion;
+
+    stages.back().pSpecializationInfo = &specializationInfo;
 
     //miss
     auto missStage = _shader->LoadShaderProgram("Shaders/raytracingReflections/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
@@ -2240,7 +2325,7 @@ void AppBase::CreateDescriptorSets() {
     writeDescriptorSet[2].pBufferInfo = &bufferInfo;
 
     VkDescriptorBufferInfo vertexBufferInfo{};
-    vertexBufferInfo.buffer = glTF::GetglTF()->_vertices.buffer;
+    vertexBufferInfo.buffer = s_gltf->_vertices.buffer;
     vertexBufferInfo.offset = 0;
     vertexBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -2252,7 +2337,7 @@ void AppBase::CreateDescriptorSets() {
     writeDescriptorSet[3].pBufferInfo = &vertexBufferInfo;
 
     VkDescriptorBufferInfo indexBufferInfo{};
-    indexBufferInfo.buffer = glTF::GetglTF()->_indices.buffer;
+    indexBufferInfo.buffer = s_gltf->_indices.buffer;
     indexBufferInfo.offset = 0;
     indexBufferInfo.range = VK_WHOLE_SIZE;
 
@@ -2306,7 +2391,7 @@ void AppBase::RecreateSwapChain() {
     CreateGraphicsPipeline();
     CreateDepthResources();
     CreateFramebuffers();
-    glTF::GetglTF()->Recreate();
+    s_gltf->Recreate();
     CreateCommandBuffers();
     BuildCommandBuffers(true);
 
@@ -2508,7 +2593,7 @@ void AppBase::CleanupSwapchain() {
     //vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
     //vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
-    glTF::GetglTF()->Cleanup();
+    s_gltf->Cleanup();
 }
 
 void AppBase::Destroy() {
@@ -2516,7 +2601,7 @@ void AppBase::Destroy() {
     CleanupSwapchain();
    
     //raytracing
-    glTF::GetglTF()->Destroy();
+    s_gltf->Destroy();
     r_instanceBuffer.Destroy(_vulkanDevice->_device);
     r_ubo.Destroy(_vulkanDevice->_device);
     r_raygenShaderBindingTable.Destroy(_vulkanDevice->_device);
@@ -2558,6 +2643,6 @@ void AppBase::Destroy() {
     delete _vulkanDevice;
     delete _swapchain;
     delete _shader;
-    delete glTF::GetglTF();
+    delete s_gltf;
     delete _camera;
 }
