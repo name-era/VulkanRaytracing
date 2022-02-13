@@ -217,6 +217,8 @@ namespace glTF {
         * @brief    ユニフォームバッファの更新
         */
         void UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view);
+
+        ~Node();
     };
 
     struct DescriptorLayouts {
@@ -641,6 +643,15 @@ void glTF::Node::UpdateUniformBuffer(glm::mat4 projection, glm::mat4 view) {
     }
 }
 
+glTF::Node::~Node() {
+    if (mesh) {
+        delete mesh;
+    }
+    for (auto& child : children) {
+        delete child;
+    }
+}
+
 /*******************************************************************************************************************
 *                                             glTF Model
 ********************************************************************************************************************/
@@ -712,7 +723,7 @@ void glTF::Model::LoadMaterials(tinygltf::Model& input) {
 }
 
 void glTF::Model::LoadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Node* parent, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer) {
-    Node* newNode{};
+    Node* newNode = new Node{};
     newNode->parent = parent;
     newNode->matrix = glm::mat4(1.0f);
     newNode->name = newNode->name;
@@ -1000,7 +1011,9 @@ void glTF::Model::CreateDescriptorSets() {
     
     //material
     for (auto& material : _materials) {
-        material.createDescriptorSet(_vulkanDevice, _descriptorPool, _descriptorSetLayout.image);
+        if (material.baseColorTexture != nullptr) {
+            material.createDescriptorSet(_vulkanDevice, _descriptorPool, _descriptorSetLayout.image);
+        }
     }
 }
 
@@ -1520,13 +1533,22 @@ void AppBase::CreateRenderPass() {
     subpass.pColorAttachments = &colorAttachmentRef;
     subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    std::array<VkSubpassDependency, 2> dependencies;
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
     VkRenderPassCreateInfo renderPassInfo{};
@@ -1535,8 +1557,8 @@ void AppBase::CreateRenderPass() {
     renderPassInfo.pAttachments = attachments.data();
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
+    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    renderPassInfo.pDependencies = dependencies.data();
     
     if (vkCreateRenderPass(_vulkanDevice->_device, &renderPassInfo, nullptr, &_renderPass) != VK_SUCCESS) {
         throw std::runtime_error("failed to create render pass!");
@@ -1966,7 +1988,7 @@ void AppBase::Initialize() {
     _camera->type = Camera::CameraType::firstperson;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 512.0f);
-    _camera->setTranslation(glm::vec3(0.0f, 100.5f, -2.0f));
+    _camera->setTranslation(glm::vec3(0.0f, 0.5f, -2.0f));
     
     //load gltf model
     glTF::Model::GetglTF();
