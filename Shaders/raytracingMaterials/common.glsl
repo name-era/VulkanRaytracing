@@ -1,5 +1,5 @@
 #extension GL_EXT_ray_tracing : enable
-#extension GL_EXT_buffer_refelence : enable
+#extension GL_EXT_buffer_reference : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_shader_explicit_arithmetic_types : enable
 #extension GL_EXT_nonuniform_qualifier : enable
@@ -17,16 +17,16 @@ struct Payload {
     int recursive;
 };
 
-struct PrimMeshInfo {
+struct PrimMesh {
     uint64_t indexBuffer;
     uint64_t vertexBuffer;
     uint32_t materialIndex;
 };
 
-struct MaterialInfo {
+struct Material {
     vec4 diffuse;
     vec4 specular;
-    int32_t materialKind;
+    int32_t materialType;
     int32_t textureIndex;
 };
 
@@ -38,11 +38,12 @@ layout(binding = BIND_SCENEPARAM, set = 0) uniform UBO {
     vec4 lightPos;
     vec4 lightColor;
     vec4 ambientColor;
+    vec3 cameraPosition;
 } ubo;
+
 layout(binding = BIND_BACKGROUND, set = 0) uniform samplerCube backGround;
-layout(binding = BIND_OBJECTLIST, set = 0) readonly buffer primMeshInfo {PrimMeshInfo i[];};
-layout(binding = BIND_MATERIALLIST, set = 0) readonly buffer materials {MaterialInfo m[];};
+layout(binding = BIND_OBJECTLIST, set = 0) readonly buffer _PrimMesh {PrimMesh primMeshes[]; };
+layout(binding = BIND_MATERIALLIST, set = 0) readonly buffer _Material {Material materials[]; };
 layout(binding = BIND_TEXTURELIST, set = 0) uniform sampler2D textures[];
 
 layout(constant_id = 0) const int MAX_RECURSION = 0;
-layout(location = 0) rayPayloadInEXT Payload payload;
