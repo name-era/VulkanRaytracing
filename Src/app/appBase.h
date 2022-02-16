@@ -26,25 +26,50 @@
 #include "common.h"
 #include "tools.h"
 
+class AccelerationStructure {
+
+public:
+
+    struct AccelerationStructureBody {
+        VkAccelerationStructureKHR handle;
+        uint64_t deviceAddress = 0;
+        VkDeviceMemory memory;
+        VkBuffer buffer;
+    }m_accelerationStructure;
+
+    /**
+    * @brief    AccelerationStructureバッファの作成
+    */
+    void CreateAccelerationStructureBuffer(VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
+
+    /**
+    * @brief    デバイスアドレスの取得
+    */
+    uint64_t GetBufferDeviceAddress(VkBuffer buffer);
+
+    void BuildBLAS(VulkanDevice* vulkanDevice);
+
+private:
+    VulkanDevice* vulkanDevice;
+};
+
 class AppBase
 {
 
 public:
 
-    //Ray tracing acceleration structure
-    struct AccelerationStructure{
-        VkAccelerationStructureKHR handle;
-        uint64_t deviceAddress = 0;
-        VkDeviceMemory memory;
-        VkBuffer buffer;
-    };
+    struct PolygonMesh {
+        Initializers::Buffer vertexBuffer;
+        Initializers::Buffer indexBuffer;
 
-    //Holds data for a ray tracing scratch buffer that is used as a temporary storage
-    struct RayTracingScratchBuffer
-    {
-        uint64_t deviceAddress = 0;
-        VkBuffer buffer = VK_NULL_HANDLE;
-        VkDeviceMemory memory = VK_NULL_HANDLE;
+        uint32_t vertexCount = 0;
+        uint32_t indexCount = 0;
+        uint32_t vertexStride = 0;
+
+        AccelerationStructure blas;
+        void Connect(Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer);
+        void PrepareBLAS(VulkanDevice vulkanDevice);
+
     };
 
     struct Image {
@@ -191,20 +216,6 @@ public:
     /*******************************************************************************************************************
     *                                             レイトレーシング
     ********************************************************************************************************************/
-    /**
-    * @brief    デバイスアドレスの取得
-    */
-    uint64_t GetBufferDeviceAddress(VkBuffer buffer);
-
-    /**
-    * @brief    AccelerationStructureバッファの作成
-    */
-    void CreateAccelerationStructureBuffer(AccelerationStructure& accelerationStructure, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
-    
-    /**
-    * @brief    スクラッチバッファの作成
-    */
-    RayTracingScratchBuffer CreateScratchBuffer(VkDeviceSize size);
 
     /**
     * @brief    BLASを構築する
@@ -366,7 +377,9 @@ public:
     Initializers::Buffer r_missShaderBindingTable;
     Initializers::Buffer r_hitShaderBindingTable;
 
-    AccelerationStructure r_bottomLevelAS;
+
+    PolygonMesh r_gltfModel;
+    PolygonMesh r_ceiling;
     AccelerationStructure r_topLevelAS;
     
     Image r_strageImage;

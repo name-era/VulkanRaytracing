@@ -23,6 +23,7 @@ namespace Initializers {
 		VkDeviceMemory memory;
 		int count;
 		void* mapped;
+		uint64_t deviceAddress;
 
 		void Flush(VkDevice& device, size_t uploadSize)
 		{
@@ -38,6 +39,15 @@ namespace Initializers {
 			vkDestroyBuffer(device, buffer, nullptr);
 			vkFreeMemory(device, memory, nullptr);
 		}
+
+		uint64_t GetBufferDeviceAddress(VkDevice device) {
+			VkBufferDeviceAddressInfo bufferDeviceInfo{};
+			bufferDeviceInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+			bufferDeviceInfo.buffer = buffer;
+			deviceAddress = vkGetBufferDeviceAddressKHR(device, &bufferDeviceInfo);
+			return deviceAddress;
+		}
+
 	};
 	
 	struct Image {

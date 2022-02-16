@@ -64,7 +64,7 @@ struct VulkanDevice {
     /**
     * @brief    バッファを作成する
     */
-    void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+    Initializers::Buffer CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
 
     /**
     * @brief    バッファをコピーする

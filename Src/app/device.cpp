@@ -184,19 +184,22 @@ void VulkanDevice::CreateCommandPool() {
     }
 }
 
-void VulkanDevice::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+Initializers::Buffer VulkanDevice::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties) {
+    
+    Initializers::Buffer ret;
+
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = size;
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateBuffer(_device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+    if (vkCreateBuffer(_device, &bufferInfo, nullptr, &ret.buffer) != VK_SUCCESS) {
         throw std::runtime_error("failed to create buffer!");
     }
 
     VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(_device, buffer, &memRequirements);
+    vkGetBufferMemoryRequirements(_device, ret.buffer, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -210,11 +213,14 @@ void VulkanDevice::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkM
         allocInfo.pNext = &memoryAllocateFlagsInfo;
     }
 
-    if (vkAllocateMemory(_device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+    if (vkAllocateMemory(_device, &allocInfo, nullptr, &ret.memory) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate buffer memory!");
     }
 
-    vkBindBufferMemory(_device, buffer, bufferMemory, 0);
+    vkBindBufferMemory(_device, ret.buffer, ret.memory, 0);
+
+    ret.GetBufferDeviceAddress(_device);
+    return ret;
 }
 
 VkCommandBuffer VulkanDevice::BeginCommand() {
