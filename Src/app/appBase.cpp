@@ -2005,10 +2005,10 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferCreateInfo.size = buildSizeInfo.accelerationStructureSize;
     bufferCreateInfo.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    vkCreateBuffer(vulkanDevice->_device, &bufferCreateInfo, nullptr, &m_accelerationStructure.buffer);
+    vkCreateBuffer(vulkanDevice->_device, &bufferCreateInfo, nullptr, &buffer);
 
     VkMemoryRequirements memoryRequirements{};
-    vkGetBufferMemoryRequirements(vulkanDevice->_device, m_accelerationStructure.buffer, &memoryRequirements);
+    vkGetBufferMemoryRequirements(vulkanDevice->_device, buffer, &memoryRequirements);
 
     VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo{};
     memoryAllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
@@ -2019,20 +2019,15 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
     memoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
     memoryAllocateInfo.allocationSize = memoryRequirements.size;
 
-    vkAllocateMemory(vulkanDevice->_device, &memoryAllocateInfo, nullptr, &m_accelerationStructure.memory);
-    vkBindBufferMemory(vulkanDevice->_device, m_accelerationStructure.buffer, m_accelerationStructure.memory, 0);
+    vkAllocateMemory(vulkanDevice->_device, &memoryAllocateInfo, nullptr, &memory);
+    vkBindBufferMemory(vulkanDevice->_device, buffer, memory, 0);
 
     VkAccelerationStructureCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    createInfo.buffer = m_accelerationStructure.buffer;
+    createInfo.buffer = buffer;
     createInfo.size = buildSizeInfo.accelerationStructureSize;
     createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-    vkCreateAccelerationStructureKHR(vulkanDevice->_device, &createInfo, nullptr, &m_accelerationStructure.handle);
-}
-
-void AccelerationStructure::BuildBLAS(VulkanDevice* vulkanDevice) {
-
-
+    vkCreateAccelerationStructureKHR(vulkanDevice->_device, &createInfo, nullptr, &handle);
 }
 
 void AppBase::PolygonMesh::Connect(Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer) {
@@ -2040,14 +2035,12 @@ void AppBase::PolygonMesh::Connect(Initializers::Buffer& vertBuffer, Initializer
     indexBuffer = idxBuffer;
 }
 
-void AppBase::PolygonMesh::PrepareBLAS(VulkanDevice vulkanDevice) {
+void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
 
     VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
     VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
-
-    //デバイスアドレスを取得
-    vertexBufferDeviceAddress.deviceAddress = vertexBuffer.GetBufferDeviceAddress(vulkanDevice._device);
-    indexBufferDeviceAddress.deviceAddress = indexBuffer.GetBufferDeviceAddress(vulkanDevice._devic);
+    vertexBufferDeviceAddress.deviceAddress = vertexBuffer.GetBufferDeviceAddress(vulkanDevice->_device);
+    indexBufferDeviceAddress.deviceAddress = indexBuffer.GetBufferDeviceAddress(vulkanDevice->_device);
 
     uint32_t numTriangles = static_cast<uint32_t>(indexBuffer.count) / 3;
     uint32_t maxVertex = vertexBuffer.count;
@@ -2066,7 +2059,7 @@ void AppBase::PolygonMesh::PrepareBLAS(VulkanDevice vulkanDevice) {
     geometryInfo.geometry.triangles.transformData.deviceAddress = 0;
     geometryInfo.geometry.triangles.transformData.hostAddress = nullptr;
 
-    //サイズ情報を取得する
+    //get sizeInfo
     VkAccelerationStructureBuildGeometryInfoKHR buildGeometryInfo{};
     buildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
     buildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
@@ -2077,7 +2070,7 @@ void AppBase::PolygonMesh::PrepareBLAS(VulkanDevice vulkanDevice) {
     VkAccelerationStructureBuildSizesInfoKHR buildSizesInfo;
     buildSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
     vkGetAccelerationStructureBuildSizesKHR(
-        vulkanDevice._device,
+        vulkanDevice->_device,
         VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
         &buildGeometryInfo,
         &numTriangles,
@@ -2086,33 +2079,33 @@ void AppBase::PolygonMesh::PrepareBLAS(VulkanDevice vulkanDevice) {
 
     blas.CreateAccelerationStructureBuffer(buildSizesInfo);
 
-    //BLASの構築に必要なスクラッチ（作業）バッファの作成
-    Initializers::Buffer scratchBuffer = vulkanDevice.CreateBuffer(
+    //create scratch buffer
+    Initializers::Buffer scratchBuffer = vulkanDevice->CreateBuffer(
         buildSizesInfo.buildScratchSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
-    //VkAccelerationStructureBuildGeometryInfoKHRの他のパラメータ
+    //VkAccelerationStructureBuildGeometryInfoKHR other parameter
     buildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-    buildGeometryInfo.dstAccelerationStructure = maingltf.handle;
-    buildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
+    buildGeometryInfo.dstAccelerationStructure = blas.handle;
+    buildGeometryInfo.scratchData.deviceAddress = scratchBuffer.GetBufferDeviceAddress(vulkanDevice->_device);
 
-    //コマンドバッファにBLASの構築を登録する
     VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo{};
     buildRangeInfo.primitiveCount = numTriangles;
     buildRangeInfo.primitiveOffset = 0;
     buildRangeInfo.firstVertex = 0;
     buildRangeInfo.transformOffset = 0;
     std::vector<VkAccelerationStructureBuildRangeInfoKHR*> buildRangeInfos = { &buildRangeInfo };
-
-    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
+    
+    //build
+    VkCommandBuffer commandBuffer = vulkanDevice->BeginCommand();
     vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildGeometryInfo, buildRangeInfos.data());
 
-    //メモリバリア
+    //memory barrier
     VkBufferMemoryBarrier memoryBarrier{};
     memoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    memoryBarrier.buffer = maingltf.buffer;
+    memoryBarrier.buffer = blas.buffer;
     memoryBarrier.size = VK_WHOLE_SIZE;
     memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     memoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -2125,31 +2118,25 @@ void AppBase::PolygonMesh::PrepareBLAS(VulkanDevice vulkanDevice) {
         0, 0, nullptr, 1, &memoryBarrier, 0, nullptr
     );
 
-    _vulkanDevice->EndCommandAndWait(commandBuffer, _vulkanDevice->_queue);
+    vulkanDevice->EndCommandAndWait(commandBuffer, vulkanDevice->_queue);
 
-    //Acceleration Structureのデバイスアドレスを取得
     VkAccelerationStructureDeviceAddressInfoKHR deviceAddressInfo{};
     deviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-    deviceAddressInfo.accelerationStructure = maingltf.handle;
-    maingltf.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(_vulkanDevice->_device, &deviceAddressInfo);
+    deviceAddressInfo.accelerationStructure = blas.handle;
+    blas.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(vulkanDevice->_device, &deviceAddressInfo);
 
-    blas.BuildBLAS(vulkanDevice);
+    vkDestroyBuffer(vulkanDevice->_device, scratchBuffer.buffer, nullptr);
+    vkFreeMemory(vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
 void AppBase::CreateBLAS() {
     
     r_gltfModel.vertexBuffer = s_model->_vertices;
     r_gltfModel.indexBuffer = s_model->_indices;
-    r_gltfModel.PrepareBLAS(_vulkanDevice);
-
-    
+    r_gltfModel.BuildBLAS(_vulkanDevice);
 
 
 
-    
-
-    vkDestroyBuffer(_vulkanDevice->_device, scratchBuffer.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
 void AppBase::CreateTLAS() {

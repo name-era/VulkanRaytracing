@@ -30,24 +30,16 @@ class AccelerationStructure {
 
 public:
 
-    struct AccelerationStructureBody {
-        VkAccelerationStructureKHR handle;
-        uint64_t deviceAddress = 0;
-        VkDeviceMemory memory;
-        VkBuffer buffer;
-    }m_accelerationStructure;
+    VkAccelerationStructureKHR handle;
+    uint64_t deviceAddress = 0;
+    VkDeviceMemory memory;
+    VkBuffer buffer;
+
 
     /**
     * @brief    AccelerationStructureバッファの作成
     */
     void CreateAccelerationStructureBuffer(VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
-
-    /**
-    * @brief    デバイスアドレスの取得
-    */
-    uint64_t GetBufferDeviceAddress(VkBuffer buffer);
-
-    void BuildBLAS(VulkanDevice* vulkanDevice);
 
 private:
     VulkanDevice* vulkanDevice;
@@ -68,7 +60,7 @@ public:
 
         AccelerationStructure blas;
         void Connect(Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer);
-        void PrepareBLAS(VulkanDevice vulkanDevice);
+        void BuildBLAS(VulkanDevice* vulkanDevice);
 
     };
 
