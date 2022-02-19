@@ -49,6 +49,18 @@ class AppBase
 {
 
 public:
+    
+    struct Image {
+        VkImage image;
+        VkDeviceMemory memory;
+        VkImageView view;
+        VkSampler sampler;
+        void Destroy(VkDevice device) {
+            vkDestroyImage(device, image, nullptr);
+            vkDestroyImageView(device, view, nullptr);
+            vkFreeMemory(device, memory, nullptr);
+        }
+    };
 
     struct PolygonMesh {
         Initializers::Buffer vertexBuffer;
@@ -62,17 +74,32 @@ public:
 
     };
 
-    struct Image {
-        VkImage image;
-        VkDeviceMemory memory;
-        VkImageView view;
-        VkSampler sampler;
-        void Destroy(VkDevice device){
-            vkDestroyImage(device, image, nullptr);
-            vkDestroyImageView(device, view, nullptr);
-            vkFreeMemory(device, memory, nullptr);
-        }
+    enum MaterialType {
+        LAMBERT, METAL, GLASS
+    };
 
+    enum TextureID {
+        TexID_Floor, TexID_Sphere
+    };
+
+    struct Material {
+        glm::vec4 diffuse = glm::vec4(1.0f);
+        glm::vec4 specular = glm::vec4(1.0f, 1.0f, 1.0f, 20.0f);
+        uint32_t materialType = LAMBERT;
+        uint32_t textureIndex = -1;
+    };
+
+    struct SceneObject {
+        PolygonMesh* mesh = nullptr;
+        glm::mat4 transform = glm::mat4(1.0f);
+        Material material;
+    };
+
+    struct ObjectParam
+    {
+        uint64_t indexBufferAddress;
+        uint64_t vertexBufferAddress;
+        uint32_t materialIndex;
     };
 
     struct UniformBlock {
@@ -216,9 +243,29 @@ public:
     Image Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
     /**
+    * @brief    メッシュを構築する
+    */
+    void PrepareMesh();
+
+    /**
+    * @brief    使用するテクスチャを構築する
+    */
+    void PrepareTexture();
+
+    /**
     * @brief    BLASを構築する
     */
     void CreateBLAS();
+
+    /**
+    * @brief    シーンオブジェクトを作成する
+    */
+    void CreateSceneObject();
+
+    /**
+    * @brief    シーンのオブジェクト情報のバッファを作成する
+    */
+    void CreateSceneBuffers();
 
     /**
     * @brief    TRASを構築する
@@ -376,10 +423,17 @@ public:
     Initializers::Buffer r_hitShaderBindingTable;
 
 
-    PolygonMesh r_gltfModel;
-    PolygonMesh r_ceiling;
+    PolygonMesh r_meshGlTF;
+    PolygonMesh r_meshPlane;
+    SceneObject r_gltfModel;
+    SceneObject r_ceiling;
+    std::vector<SceneObject> r_sceneObjects;
+
     std::vector<Image> r_textures;
     Image r_cubeMap;
+
+
+    
     AccelerationStructure r_topLevelAS;
     
     Image r_strageImage;
