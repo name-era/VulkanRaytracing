@@ -24,7 +24,7 @@
 #include "gui.h"
 #include "shader.h"
 #include "common.h"
-#include "tools.h"
+#include "utils.h"
 
 class AccelerationStructure {
 
@@ -39,7 +39,7 @@ public:
     /**
     * @brief    AccelerationStructureバッファの作成
     */
-    void CreateAccelerationStructureBuffer(VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
+    void CreateAccelerationStructureBuffer(VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount);
 
 private:
     VulkanDevice* vulkanDevice;
@@ -93,6 +93,9 @@ public:
         PolygonMesh* mesh = nullptr;
         glm::mat4 transform = glm::mat4(1.0f);
         Material material;
+
+        uint32_t offset = 0;
+        uint32_t index = 0;
     };
 
     struct ObjectParam
@@ -428,12 +431,12 @@ public:
     SceneObject r_gltfModel;
     SceneObject r_ceiling;
     std::vector<SceneObject> r_sceneObjects;
-
+    Initializers::Buffer r_materialStorageBuffer;
+    Initializers::Buffer r_objectStorageBuffer;
     std::vector<Image> r_textures;
     Image r_cubeMap;
 
-
-    
+    //TLAS
     AccelerationStructure r_topLevelAS;
     
     Image r_strageImage;
