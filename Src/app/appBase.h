@@ -207,7 +207,13 @@ public:
     /*******************************************************************************************************************
     *                                             レイトレーシング
     ********************************************************************************************************************/
-    Image CreateTextureCube(const wchar_t* imageFiles[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
+
+    //あとでdeviceクラスに移動
+    Image CreateTextureCube(const wchar_t* fileNames[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
+
+    Image CreateTextureImageAndView(uint32_t width, uint32_t height, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
+
+    Image Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
     /**
     * @brief    BLASを構築する
@@ -372,6 +378,7 @@ public:
 
     PolygonMesh r_gltfModel;
     PolygonMesh r_ceiling;
+    std::vector<Image> r_textures;
     Image r_cubeMap;
     AccelerationStructure r_topLevelAS;
     

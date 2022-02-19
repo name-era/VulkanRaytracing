@@ -2087,14 +2087,14 @@ void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
     vkFreeMemory(vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
-AppBase::Image AppBase::CreateTextureCube(const wchar_t* imageFiles[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
+AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
 
     int width, height;
     stbi_uc* images[6] = { 0 };
     std::vector<char> binImages[6];
 
     for (uint32_t i = 0; i < 6; i++) {
-        std::ifstream infile(imageFiles[i], std::ios::binary);
+        std::ifstream infile(fileNames[i], std::ios::binary);
         if (infile) {
             throw std::runtime_error("failed to find images!");
         }
@@ -2134,6 +2134,20 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* imageFiles[6], VkImageU
 
     Image cubeMap;
     vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &cubeMap.image);
+
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(_vulkanDevice->_device, cubeMap.image, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = _vulkanDevice->FindMemoryType(memRequirements.memoryTypeBits, memProps);
+
+    if (vkAllocateMemory(_vulkanDevice->_device, &allocInfo, nullptr, &cubeMap.memory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate image memory!");
+    }
+
+    vkBindImageMemory(_vulkanDevice->_device, cubeMap.image, cubeMap.memory, 0);
 
     //create imageview
     VkImageViewCreateInfo viewInfo{};
@@ -2206,6 +2220,137 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* imageFiles[6], VkImageU
     return cubeMap;
 }
 
+AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t height, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
+    //create image
+    usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = usage;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (!(imageInfo.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
+
+    Image imageResource;
+    vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &imageResource.image);
+
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(_vulkanDevice->_device, imageResource.image, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = _vulkanDevice->FindMemoryType(memRequirements.memoryTypeBits, memProps);
+
+    if (vkAllocateMemory(_vulkanDevice->_device, &allocInfo, nullptr, &imageResource.memory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate image memory!");
+    }
+
+    vkBindImageMemory(_vulkanDevice->_device, imageResource.image, imageResource.memory, 0);
+
+    //create imageview
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = imageResource.image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = imageInfo.format;
+    viewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+
+    if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &imageResource.view) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture image view!");
+    }
+
+    return imageResource;
+}
+
+AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
+    stbi_uc* image = nullptr;
+    std::vector<char> binImage;
+    std::ifstream infile(fileNames, std::ios::binary);
+    if (!infile) {
+        throw std::runtime_error("failed to find images!");
+    }
+
+    binImage.resize(infile.seekg(0, std::ifstream::end).tellg());
+    infile.seekg(0, std::ifstream::beg).read(binImage.data(), binImage.size());
+    
+    int width, height;
+    auto image = stbi_load_from_memory(
+        reinterpret_cast<uint8_t*>(binImage.data()),
+        int(binImage.size()),
+        &width,
+        &height,
+        nullptr,
+        4
+    );
+
+    Image textureResource = CreateTextureImageAndView(width, height, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT, memProps);
+
+
+    //staging buffer
+    auto imageSize = width * height * sizeof(uint32_t);
+
+    auto bufferSrc = _vulkanDevice->CreateBuffer(
+        imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    void* data;
+    vkMapMemory(_vulkanDevice->_device, bufferSrc.memory, 0, VK_WHOLE_SIZE, 0, &data);
+    memcpy(data, bufferSrc.buffer, imageSize);
+    vkUnmapMemory(_vulkanDevice->_device, bufferSrc.memory);
+
+    _vulkanDevice->TransitionImageLayout(textureResource.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
+
+    //copy to image
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
+    for (uint32_t i = 0; i < 6; i++) {
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = {
+            uint32_t(width),
+            uint32_t(height),
+            1
+        };
+
+        vkCmdCopyBufferToImage(commandBuffer, bufferSrc.buffer, textureResource.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    }
+    _vulkanDevice->EndCommand(commandBuffer, _vulkanDevice->_queue);
+    _vulkanDevice->TransitionImageLayout(textureResource.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+
+
+    vkDestroyBuffer(_vulkanDevice->_device, bufferSrc.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, bufferSrc.memory, nullptr);
+
+    textureResource.sampler = _vulkanDevice->CreateSampler();
+    return textureResource;
+}
+
 void AppBase::CreateBLAS() {
 
     //load gltf model
@@ -2273,18 +2418,20 @@ void AppBase::CreateBLAS() {
 
     r_ceiling.BuildBLAS(_vulkanDevice);
 
+    //ceiling texture
+    for (const auto* fileName : { L"Assets/textures/trianglify-lowres.png", L"Assets/textures/land_ocean_ice_cloud.jpg" }) {
+        auto usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        r_textures.push_back(Create2DTexture(fileName, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
+    }
 
     //background texture
     const wchar_t* textures[6] = {
-        L"textures/posx.jpg", L"textures/negx.jpg",
-        L"textures/posy.jpg", L"textures/negy.jpg",
-        L"textures/posz.jpg", L"textures/negz.jpg"
+        L"Assets/textures/posx.jpg", L"Assets/textures/negx.jpg",
+        L"Assets/textures/posy.jpg", L"Assets/textures/negy.jpg",
+        L"Assets/textures/posz.jpg", L"Assets/textures/negz.jpg"
     };
 
     r_cubeMap = CreateTextureCube(textures, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    
-
-
 }
 
 void AppBase::CreateTLAS() {
