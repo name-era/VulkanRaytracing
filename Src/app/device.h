@@ -107,6 +107,11 @@ struct VulkanDevice {
     VkFormat FindDepthFormat();
 
     /**
+    * @brief    ƒTƒ“ƒvƒ‰[‚ğì¬‚·‚é
+    */
+    VkSampler CreateSampler();
+
+    /**
     * @brief    ‰Šú‰»
     */
     void Connect(VkPhysicalDevice physicalDevice);

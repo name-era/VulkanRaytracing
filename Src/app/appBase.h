@@ -54,8 +54,6 @@ public:
         Initializers::Buffer vertexBuffer;
         Initializers::Buffer indexBuffer;
 
-        uint32_t vertexCount = 0;
-        uint32_t indexCount = 0;
         uint32_t vertexStride = 0;
 
         AccelerationStructure blas;
@@ -68,6 +66,7 @@ public:
         VkImage image;
         VkDeviceMemory memory;
         VkImageView view;
+        VkSampler sampler;
         void Destroy(VkDevice device){
             vkDestroyImage(device, image, nullptr);
             vkDestroyImageView(device, view, nullptr);
@@ -208,6 +207,7 @@ public:
     /*******************************************************************************************************************
     *                                             レイトレーシング
     ********************************************************************************************************************/
+    Image CreateTextureCube(const wchar_t* imageFiles[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
     /**
     * @brief    BLASを構築する
@@ -372,6 +372,7 @@ public:
 
     PolygonMesh r_gltfModel;
     PolygonMesh r_ceiling;
+    Image r_cubeMap;
     AccelerationStructure r_topLevelAS;
     
     Image r_strageImage;

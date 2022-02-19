@@ -4,7 +4,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #include <tiny_gltf.h>
-
+#include <stb_image.h>
 
 /*******************************************************************************************************************
 *                                             glTF
@@ -54,10 +54,7 @@ namespace glTF {
         */
         void CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 
-        /**
-        * @brief    サンプラーを作成する
-        */
-        void CreateSampler();
+
 
         /**
         * @brief    イメージの読み込み
@@ -407,22 +404,21 @@ void glTF::Texture::PrepareImage(void* buffer, VkDeviceSize bufferSize, VkFormat
 
     mipLevel = 1;
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+    Initializers::Buffer stagingBuffer;
+    stagingBuffer = vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     void* data;
-    vkMapMemory(vulkanDevice->_device, stagingBufferMemory, 0, VK_WHOLE_SIZE, 0, &data);
+    vkMapMemory(vulkanDevice->_device, stagingBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
     memcpy(data, buffer, bufferSize);
-    vkUnmapMemory(vulkanDevice->_device, stagingBufferMemory);
+    vkUnmapMemory(vulkanDevice->_device, stagingBuffer.memory);
 
     CreateImage(texWidth, texHeight, mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
     vulkanDevice->TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevel);
-    CopyBufferToImage(stagingBuffer, image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    CopyBufferToImage(stagingBuffer.buffer, image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
     vulkanDevice->TransitionImageLayout(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevel);
 
-    vkDestroyBuffer(vulkanDevice->_device, stagingBuffer, nullptr);
-    vkFreeMemory(vulkanDevice->_device, stagingBufferMemory, nullptr);
+    vkDestroyBuffer(vulkanDevice->_device, stagingBuffer.buffer, nullptr);
+    vkFreeMemory(vulkanDevice->_device, stagingBuffer.memory, nullptr);
 }
 
 void glTF::Texture::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) {
@@ -439,33 +435,6 @@ void glTF::Texture::CreateImageView(VkImage image, VkFormat format, VkImageAspec
 
     if (vkCreateImageView(vulkanDevice->_device, &viewInfo, nullptr, &view) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
-    }
-}
-
-void glTF::Texture::CreateSampler() {
-    VkPhysicalDeviceProperties properties{};
-    vkGetPhysicalDeviceProperties(vulkanDevice->_physicalDevice, &properties);
-
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = static_cast<float>(mipLevel);
-    samplerInfo.mipLodBias = 0.0f;
-
-    if (vkCreateSampler(vulkanDevice->_device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create texture sampler!");
     }
 }
 
@@ -496,7 +465,7 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage) {
 
     PrepareImage(buffer, bufferSize, IMAGEFORMAT, gltfImage.width, gltfImage.height);
     CreateImageView(image, IMAGEFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
-    CreateSampler();
+    sampler = vulkanDevice->CreateSampler();
 
     if (deleteBuffer) {
         delete[] buffer;
@@ -1071,13 +1040,11 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
     VkDeviceSize vertexBufferSize = vertexBuffer.size() * sizeof(Vertex);
     _vertices.count = static_cast<uint32_t>(vertexBuffer.size());
 
-    Vertices vertexStaging;
-
-    _vulkanDevice->CreateBuffer(
+    Initializers::Buffer vertexStaging;
+    vertexStaging = _vulkanDevice->CreateBuffer(
         vertexBufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        vertexStaging.buffer, vertexStaging.memory
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
     void* data;
@@ -1085,11 +1052,10 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
     memcpy(data, vertexBuffer.data(), (size_t)vertexBufferSize);
     vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
 
-    _vulkanDevice->CreateBuffer(
+    _vertices = _vulkanDevice->CreateBuffer(
         vertexBufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | memoryPropertyFlags,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        _vertices.buffer, _vertices.memory
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
     _vulkanDevice->CopyBuffer(vertexStaging.buffer, _vertices.buffer, vertexBufferSize);
@@ -1101,24 +1067,21 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
     VkDeviceSize indexBufferSize = indexBuffer.size() * sizeof(uint32_t);
     _indices.count = static_cast<uint32_t>(indexBuffer.size());
 
-    Vertices indexStaging;
-
-    _vulkanDevice->CreateBuffer(
+    Initializers::Buffer indexStaging;
+    indexStaging = _vulkanDevice->CreateBuffer(
         indexBufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        indexStaging.buffer, indexStaging.memory
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
     vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
     memcpy(data, indexBuffer.data(), (size_t)indexBufferSize);
     vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
 
-    _vulkanDevice->CreateBuffer(
+    _indices = _vulkanDevice->CreateBuffer(
         indexBufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | memoryPropertyFlags,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        _indices.buffer, _indices.memory
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
     _vulkanDevice->CopyBuffer(indexStaging.buffer, _indices.buffer, indexBufferSize);
@@ -1978,12 +1941,7 @@ void AppBase::Initialize() {
     _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 512.0f);
     _camera->setTranslation(glm::vec3(0.0f, 0.5f, -2.0f));
     
-    //load gltf model
-    glTF::Model::GetglTF();
-    s_model->Connect(_vulkanDevice);
-    s_model->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
-    s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
+
 
     InitRayTracing();
 
@@ -2129,12 +2087,202 @@ void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
     vkFreeMemory(vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
+AppBase::Image AppBase::CreateTextureCube(const wchar_t* imageFiles[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
+
+    int width, height;
+    stbi_uc* images[6] = { 0 };
+    std::vector<char> binImages[6];
+
+    for (uint32_t i = 0; i < 6; i++) {
+        std::ifstream infile(imageFiles[i], std::ios::binary);
+        if (infile) {
+            throw std::runtime_error("failed to find images!");
+        }
+        binImages[i].resize(infile.seekg(0, std::ifstream::end).tellg());
+        infile.seekg(0, std::ifstream::beg).read(binImages[i].data(), binImages[i].size());
+
+        images[i] = stbi_load_from_memory(
+            reinterpret_cast<uint8_t*>(binImages->data()),
+            int(binImages->size()),
+            &width,
+            &height,
+            nullptr,
+            4
+        );
+    }
+
+    //create image
+    usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = usage;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (!(imageInfo.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
+
+    Image cubeMap;
+    vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &cubeMap.image);
+
+    //create imageview
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = cubeMap.image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+    viewInfo.format = imageInfo.format;
+    viewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+
+    if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &cubeMap.view) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture image view!");
+    }
+
+    //staging buffer
+    Initializers::Buffer buffers[6];
+    auto imageSize = width * height * sizeof(uint32_t);
+    for (uint32_t i = 0; i < 6; i++) {
+        buffers[i] = _vulkanDevice->CreateBuffer(
+            imageSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+
+        void* data;
+        vkMapMemory(_vulkanDevice->_device, buffers[i].memory, 0, VK_WHOLE_SIZE, 0, &data);
+        memcpy(data, buffers[i].buffer, imageSize);
+        vkUnmapMemory(_vulkanDevice->_device, buffers[i].memory);
+
+    }
+
+    _vulkanDevice->TransitionImageLayout(cubeMap.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
+    
+    //copy to image
+    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
+    for (uint32_t i = 0; i < 6; i++) {
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = {
+            uint32_t(width),
+            uint32_t(height),
+            1
+        };
+
+        vkCmdCopyBufferToImage(commandBuffer, buffers[i].buffer, cubeMap.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    }
+    _vulkanDevice->EndCommand(commandBuffer, _vulkanDevice->_queue);
+    _vulkanDevice->TransitionImageLayout(cubeMap.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+
+    for (auto buffer : buffers) {
+        vkDestroyBuffer(_vulkanDevice->_device, buffer.buffer, nullptr);
+        vkFreeMemory(_vulkanDevice->_device, buffer.memory, nullptr);
+    }
+
+    cubeMap.sampler = _vulkanDevice->CreateSampler();
+
+    return cubeMap;
+}
+
 void AppBase::CreateBLAS() {
+
+    //load gltf model
+    glTF::Model::GetglTF();
+    s_model->Connect(_vulkanDevice);
+    s_model->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
+    s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
     
     r_gltfModel.vertexBuffer = s_model->_vertices;
     r_gltfModel.indexBuffer = s_model->_indices;
     r_gltfModel.BuildBLAS(_vulkanDevice);
 
+    //ceiling
+    std::vector <primitive::Vertex> vertices;
+    std::vector<uint32_t> indices;
+    primitive::GetCeiling(vertices, indices);
+    uint32_t vertexSize = static_cast<uint32_t>(vertices.size() * sizeof(primitive::Vertex));
+    uint32_t indexSize = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
+
+    //vertex
+    Initializers::Buffer vertexStaging;
+    vertexStaging = _vulkanDevice->CreateBuffer(
+        vertexSize,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    void* data;
+    vkMapMemory(_vulkanDevice->_device, vertexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
+    memcpy(data, vertices.data(), vertexSize);
+    vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
+
+    r_ceiling.vertexBuffer = _vulkanDevice->CreateBuffer(
+        vertexSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+    _vulkanDevice->CopyBuffer(vertexStaging.buffer, r_ceiling.vertexBuffer.buffer, vertexSize);
+
+    vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
+
+    //index
+    Initializers::Buffer indexStaging;
+    indexStaging = _vulkanDevice->CreateBuffer(
+        indexSize,
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
+    memcpy(data, indices.data(), indexSize);
+    vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
+
+    r_ceiling.indexBuffer = _vulkanDevice->CreateBuffer(
+        indexSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+    _vulkanDevice->CopyBuffer(indexStaging.buffer, r_ceiling.indexBuffer.buffer, indexSize);
+
+    vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
+
+    r_ceiling.BuildBLAS(_vulkanDevice);
+
+
+    //background texture
+    const wchar_t* textures[6] = {
+        L"textures/posx.jpg", L"textures/negx.jpg",
+        L"textures/posy.jpg", L"textures/negy.jpg",
+        L"textures/posz.jpg", L"textures/negz.jpg"
+    };
+
+    r_cubeMap = CreateTextureCube(textures, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    
 
 
 }

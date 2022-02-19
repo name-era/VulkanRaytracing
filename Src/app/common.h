@@ -23,7 +23,6 @@ namespace Initializers {
 		VkDeviceMemory memory;
 		int count;
 		void* mapped;
-		uint64_t deviceAddress;
 
 		void Flush(VkDevice& device, size_t uploadSize)
 		{
@@ -44,8 +43,7 @@ namespace Initializers {
 			VkBufferDeviceAddressInfo bufferDeviceInfo{};
 			bufferDeviceInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 			bufferDeviceInfo.buffer = buffer;
-			deviceAddress = vkGetBufferDeviceAddressKHR(device, &bufferDeviceInfo);
-			return deviceAddress;
+			return vkGetBufferDeviceAddressKHR(device, &bufferDeviceInfo);
 		}
 
 	};
@@ -57,5 +55,28 @@ namespace Initializers {
 		VkSampler sampler;
 	};
 
+}
+
+namespace primitive {
+
+	struct Vertex {
+		glm::vec3 pos;
+		glm::vec3 normal;
+		glm::vec2 uv;
+		glm::vec4 color;
+	};
+
+	void GetCeiling(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
+	{
+		glm::vec4 color = glm::vec4(1, 1, 1, 1);
+		Vertex vertices[] = {
+			Vertex{ {-1.0f, -1.0f,-1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f}, color },
+			Vertex{ {-1.0f, -1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f}, color },
+			Vertex{ { 1.0f, -1.0f,-1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f}, color },
+			Vertex{ { 1.0f, -1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f}, color },
+		};
+		vertices.resize(4);
+		indices = { 0, 1, 2, 2, 1, 3 };
+	}
 
 }
