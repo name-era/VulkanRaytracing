@@ -2183,7 +2183,7 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
 
     for (uint32_t i = 0; i < 6; i++) {
         std::ifstream infile(fileNames[i], std::ios::binary);
-        if (infile) {
+        if (!infile) {
             throw std::runtime_error("failed to find images!");
         }
         binImages[i].resize(infile.seekg(0, std::ifstream::end).tellg());
@@ -2209,7 +2209,7 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
     imageInfo.extent.height = height;
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
+    imageInfo.arrayLayers = 6;
     imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -2248,7 +2248,7 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.layerCount = 6;
 
     if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &cubeMap.view) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
@@ -2266,7 +2266,7 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
 
         void* data;
         vkMapMemory(_vulkanDevice->_device, buffers[i].memory, 0, VK_WHOLE_SIZE, 0, &data);
-        memcpy(data, buffers[i].buffer, imageSize);
+        memcpy(data, images[i], imageSize);
         vkUnmapMemory(_vulkanDevice->_device, buffers[i].memory);
 
     }
@@ -2311,68 +2311,74 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
 void AppBase::PrepareMesh() {
 
     //load gltf model
-    glTF::Model::GetglTF();
-    s_model->Connect(_vulkanDevice);
-    s_model->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
-    s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
+    {
+        glTF::Model::GetglTF();
+        s_model->Connect(_vulkanDevice);
+        s_model->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
+        s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
 
-    r_meshGlTF.vertexBuffer = s_model->_vertices;
-    r_meshGlTF.indexBuffer = s_model->_indices;
+        r_meshGlTF.vertexBuffer = s_model->_vertices;
+        r_meshGlTF.indexBuffer = s_model->_indices;
+    }
+
     
-    //ceiling
-    std::vector <PrimitiveMesh::Vertex> vertices;
-    std::vector<uint32_t> indices;
-    PrimitiveMesh::GetCeiling(vertices, indices);
-    uint32_t vertexSize = static_cast<uint32_t>(vertices.size() * sizeof(PrimitiveMesh::Vertex));
-    uint32_t indexSize = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
+    //plane
+    {
+        std::vector <PrimitiveMesh::Vertex> vertices;
+        std::vector<uint32_t> indices;
+        PrimitiveMesh::GetCeiling(vertices, indices);
+        uint32_t vertexSize = static_cast<uint32_t>(vertices.size() * sizeof(PrimitiveMesh::Vertex));
+        uint32_t indexSize = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
 
-    //vertex
-    Initializers::Buffer vertexStaging;
-    vertexStaging = _vulkanDevice->CreateBuffer(
-        vertexSize,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
+        //vertex
+        Initializers::Buffer vertexStaging;
+        vertexStaging = _vulkanDevice->CreateBuffer(
+            vertexSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
 
-    void* data;
-    vkMapMemory(_vulkanDevice->_device, vertexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
-    memcpy(data, vertices.data(), vertexSize);
-    vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
+        void* data;
+        vkMapMemory(_vulkanDevice->_device, vertexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
+        memcpy(data, vertices.data(), vertexSize);
+        vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
 
-    r_meshPlane.vertexBuffer = _vulkanDevice->CreateBuffer(
-        vertexSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-    _vulkanDevice->CopyBuffer(vertexStaging.buffer, r_meshPlane.vertexBuffer.buffer, vertexSize);
+        r_meshPlane.vertexBuffer = _vulkanDevice->CreateBuffer(
+            vertexSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+        _vulkanDevice->CopyBuffer(vertexStaging.buffer, r_meshPlane.vertexBuffer.buffer, vertexSize);
 
-    vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
+        vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
+        vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
 
-    //index
-    Initializers::Buffer indexStaging;
-    indexStaging = _vulkanDevice->CreateBuffer(
-        indexSize,
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
+        //index
+        Initializers::Buffer indexStaging;
+        indexStaging = _vulkanDevice->CreateBuffer(
+            indexSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
 
-    vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
-    memcpy(data, indices.data(), indexSize);
-    vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
+        vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
+        memcpy(data, indices.data(), indexSize);
+        vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
 
-    r_meshPlane.indexBuffer = _vulkanDevice->CreateBuffer(
-        indexSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );
-    _vulkanDevice->CopyBuffer(indexStaging.buffer, r_meshPlane.indexBuffer.buffer, indexSize);
+        r_meshPlane.indexBuffer = _vulkanDevice->CreateBuffer(
+            indexSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+        _vulkanDevice->CopyBuffer(indexStaging.buffer, r_meshPlane.indexBuffer.buffer, indexSize);
 
-    vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
+        vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
+        vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
 
-    r_meshPlane.vertexStride = uint32_t(sizeof(PrimitiveMesh::Vertex));
+        r_meshPlane.vertexStride = uint32_t(sizeof(PrimitiveMesh::Vertex));
+    }
+
 }
 
 void AppBase::PrepareTexture() {

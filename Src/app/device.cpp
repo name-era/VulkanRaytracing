@@ -219,7 +219,10 @@ Initializers::Buffer VulkanDevice::CreateBuffer(VkDeviceSize size, VkBufferUsage
 
     vkBindBufferMemory(_device, ret.buffer, ret.memory, 0);
 
-    ret.GetBufferDeviceAddress(_device);
+    if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+        ret.GetBufferDeviceAddress(_device);
+    }
+
     return ret;
 }
 
