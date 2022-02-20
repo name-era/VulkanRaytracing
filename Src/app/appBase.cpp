@@ -1947,7 +1947,7 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
     createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
     createInfo.buffer = buffer;
     createInfo.size = buildSizeInfo.accelerationStructureSize;
-    createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    createInfo.type = type;
     vkCreateAccelerationStructureKHR(vulkanDevice->_device, &createInfo, nullptr, &handle);
 
     //create scratch buffer

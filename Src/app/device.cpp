@@ -119,22 +119,21 @@ void VulkanDevice::CreateLogicalDevice() {
     accelerationStructureF.accelerationStructure = VK_TRUE;
     accelerationStructureF.pNext = &rayTracingPipelineF;
 
+    //enable using descriptor array
+    VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingF{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES
+    };
+    descriptorIndexingF.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
+    descriptorIndexingF.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    descriptorIndexingF.runtimeDescriptorArray = VK_TRUE;
+    descriptorIndexingF.descriptorBindingVariableDescriptorCount = VK_TRUE;
+    descriptorIndexingF.descriptorBindingPartiallyBound = VK_TRUE;
+    descriptorIndexingF.pNext = &accelerationStructureF;
+
     VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
     physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    physicalDeviceFeatures2.pNext = &accelerationStructureF;
+    physicalDeviceFeatures2.pNext = &descriptorIndexingF;
     vkGetPhysicalDeviceFeatures2(_physicalDevice, &physicalDeviceFeatures2);
-
-
-    //ディスクリプタ配列を使えるようにする
-    //VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingF{
-    //    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES
-    //};
-    //descriptorIndexingF.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
-    //descriptorIndexingF.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-    //descriptorIndexingF.runtimeDescriptorArray = VK_TRUE;
-    //descriptorIndexingF.descriptorBindingVariableDescriptorCount = VK_TRUE;
-    //descriptorIndexingF.descriptorBindingPartiallyBound = VK_TRUE;
-    //descriptorIndexingF.pNext = &accelerationStructureF;
 
     createInfo.pNext = &physicalDeviceFeatures2;
     createInfo.pEnabledFeatures = nullptr;
