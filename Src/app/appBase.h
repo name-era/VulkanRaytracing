@@ -32,7 +32,7 @@ public:
 
     AccelerationStructure(){};
     AccelerationStructure(VulkanDevice* device);
-    void CreateAccelerationStructureBuffer(VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount);
+    void CreateAccelerationStructureBuffer(VkAccelerationStructureTypeKHR type, VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount);
     void Destroy();
     
     VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
@@ -425,7 +425,7 @@ public:
     Image r_cubeMap;
 
     //TLAS
-    AccelerationStructure r_topLevelAS;
+    AccelerationStructure* r_topLevelAS;
     
     Image r_strageImage;
 

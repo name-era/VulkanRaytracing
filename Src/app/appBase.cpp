@@ -1902,12 +1902,12 @@ AccelerationStructure::AccelerationStructure(VulkanDevice* device)
     vulkanDevice = device;
 }
 
-void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount) {
+void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStructureTypeKHR type, VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount) {
 
     //get sizeInfo
     VkAccelerationStructureBuildGeometryInfoKHR buildGeometryInfo{};
     buildGeometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-    buildGeometryInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    buildGeometryInfo.type = type;
     buildGeometryInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
     buildGeometryInfo.geometryCount = 1;
     buildGeometryInfo.pGeometries = &geometryInfo;
@@ -2036,7 +2036,8 @@ void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
     geometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
     geometryInfo.geometry.triangles.transformData.deviceAddress = 0;
     geometryInfo.geometry.triangles.transformData.hostAddress = nullptr;
-    blas->CreateAccelerationStructureBuffer(geometryInfo, numTriangles);
+
+    blas->CreateAccelerationStructureBuffer(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, geometryInfo, numTriangles);
 }
 
 AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t height, VkFormat format, VkImageAspectFlags aspectFlags, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
@@ -2526,8 +2527,8 @@ void AppBase::CreateTLAS() {
     geometryInfo.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
     geometryInfo.geometry.instances.arrayOfPointers = VK_FALSE;
     geometryInfo.geometry.instances.data = instanceDataDeviceAddress;
-    
-    r_topLevelAS.CreateAccelerationStructureBuffer(geometryInfo, uint32_t(instances.size()));
+    r_topLevelAS = new AccelerationStructure(_vulkanDevice);
+    r_topLevelAS->CreateAccelerationStructureBuffer(VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, geometryInfo, uint32_t(instances.size()));
 }
 
 void AppBase::CreateStrageImage() {
@@ -2803,7 +2804,7 @@ void AppBase::CreateDescriptorSets() {
         VkWriteDescriptorSetAccelerationStructureKHR accelerationInfo{};
         accelerationInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
         accelerationInfo.accelerationStructureCount = 1;
-        accelerationInfo.pAccelerationStructures = &r_topLevelAS.handle;
+        accelerationInfo.pAccelerationStructures = &r_topLevelAS->handle;
 
         writeDescriptorSetsInfo[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writeDescriptorSetsInfo[0].pNext = &accelerationInfo;
@@ -3164,9 +3165,9 @@ void AppBase::Destroy() {
     r_meshGlTF->indexBuffer.Destroy(_vulkanDevice->_device);
 
 
-    vkDestroyBuffer(_vulkanDevice->_device, r_topLevelAS.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, r_topLevelAS.memory, nullptr);
-    vkDestroyAccelerationStructureKHR(_vulkanDevice->_device, r_topLevelAS.handle, nullptr);
+    vkDestroyBuffer(_vulkanDevice->_device, r_topLevelAS->buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, r_topLevelAS->memory, nullptr);
+    vkDestroyAccelerationStructureKHR(_vulkanDevice->_device, r_topLevelAS->handle, nullptr);
 
     r_strageImage.Destroy(_vulkanDevice->_device);
 

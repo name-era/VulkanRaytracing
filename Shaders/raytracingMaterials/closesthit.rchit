@@ -1,5 +1,6 @@
 #version 460
 
+#extension GL_GOOGLE_include_directive : enable
 #include "common.glsl"
 layout(location = 0) rayPayloadInEXT Payload payload;
 
@@ -42,18 +43,18 @@ void main() {
     vec3 color = vec3(0);
     //lambert
     if(material.materialType == 0) {
-        vec3 toEyeDir = normalize(primMesh.cameraPosition.xyz - worldPosition);
-        color = LambertLight(worldNormal, tolightDir, albedo, lightColor, primMesh.ambientColor);
+        vec3 toEyeDir = normalize(ubo.cameraPosition.xyz - worldPosition);
+        color = LambertLight(worldNormal, tolightDir, albedo, lightColor, ubo.ambientColor.xyz);
         if(dotNL > 0) {
             color += PhongSpecular(worldNormal, - tolightDir, toEyeDir, albedo, material.specular);
         }
     }
     //metal
-    else if(material.materialType == 1) {
+    if(material.materialType == 1) {
         Reflection(worldPosition, worldNormal, gl_WorldRayDirectionEXT);
     }
     //glass
-    else if(material.materialType == 2) {
+    if(material.materialType == 2) {
         Refraction(worldPosition, worldNormal, gl_WorldRayDirectionEXT);
     }
 
