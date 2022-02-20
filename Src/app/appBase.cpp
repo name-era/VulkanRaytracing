@@ -1684,64 +1684,6 @@ void AppBase::InitializeGUI() {
     ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 
-void AppBase::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = mipLevels;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = format;
-    imageInfo.tiling = tiling;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = usage;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    if (!(imageInfo.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
-        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    }
-
-    if (vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create image!");
-    }
-
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(_vulkanDevice->_device, image, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = _vulkanDevice->FindMemoryType(memRequirements.memoryTypeBits, properties);
-
-    if (vkAllocateMemory(_vulkanDevice->_device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate image memory!");
-    }
-
-    vkBindImageMemory(_vulkanDevice->_device, image, imageMemory, 0);
-}
-
-VkImageView AppBase::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) {
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspectFlags;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = mipLevels;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-
-    VkImageView imageView;
-    if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create texture image view!");
-    }
-
-    return imageView;
-}
-
 void AppBase::CreateDepthResources() {
 
     VkFormat depthFormat = _vulkanDevice->FindDepthFormat();
@@ -2561,12 +2503,11 @@ void AppBase::CreateTLAS() {
 
 void AppBase::CreateStrageImage() {
     
-    CreateImage(
-        WIDTH, HEIGHT, 1, SWAPCHAINCOLORFORMAT, VK_IMAGE_TILING_OPTIMAL,
+    CreateTextureImageAndView(
+        WIDTH, HEIGHT,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, r_strageImage.image, r_strageImage.memory
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
-    r_strageImage.view = CreateImageView(r_strageImage.image, SWAPCHAINCOLORFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     
     _vulkanDevice->TransitionImageLayout(r_strageImage.image, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,1);
 
@@ -2575,17 +2516,23 @@ void AppBase::CreateStrageImage() {
 void AppBase::UpdateUniformBuffer() {
     _uniformData.projInverse = glm::inverse(_camera->matrix.perspective);
     _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
-    _uniformData.lightPos = glm::vec4(cos(glm::radians(timer * 360.0f)) * 40.0f, -50.0f + sin(glm::radians(timer * 360.0f)) * 20.0f, 25.0f + sin(glm::radians(timer * 360.0f)) * 5.0f, 0.0f);
-    _uniformData.vertexSize = sizeof(glTF::Vertex);
-    memcpy(r_ubo.mapped, &_uniformData, sizeof(_uniformData));
+    _uniformData.lightDirection = glm::vec4(-0.2f, -1.0f, -1.0f, 0.0f);
+    _uniformData.lightColor = glm::vec4(1.0f);
+    _uniformData.ambientColor = glm::vec4(0.25f);
+    _uniformData.cameraPosition = _camera->position;
+    memcpy(r_ubo.mapped, &_uniformData, sizeof(UniformBlock));
 }
 
 void AppBase::CreateUniformBuffer() {
-    VkDeviceSize bufferSize = sizeof(_uniformData);
-    _vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, r_ubo.buffer, r_ubo.memory);
+    VkDeviceSize bufferSize = sizeof(UniformBlock);
+    r_ubo = _vulkanDevice->CreateBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
 
     vkMapMemory(_vulkanDevice->_device, r_ubo.memory, 0, VK_WHOLE_SIZE, 0, &r_ubo.mapped);
-    memcpy(r_ubo.mapped, &r_ubo, sizeof(_uniformData));
+    memcpy(r_ubo.mapped, &r_ubo, sizeof(UniformBlock));
 
     UpdateUniformBuffer();
 }
@@ -2607,7 +2554,7 @@ void AppBase::CreateRaytracingLayout() {
     //uniform buffer
     VkDescriptorSetLayoutBinding uniformBufferBinding{};
     uniformBufferBinding.binding = 2;
-    uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
     uniformBufferBinding.descriptorCount = 1;
     uniformBufferBinding.stageFlags = VK_SHADER_STAGE_ALL;
 
@@ -2635,7 +2582,7 @@ void AppBase::CreateRaytracingLayout() {
     //texture
     VkDescriptorSetLayoutBinding textureBinding{};
     textureBinding.binding = 6;
-    textureBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    textureBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     textureBinding.descriptorCount = 1;
     textureBinding.stageFlags = VK_SHADER_STAGE_ALL;
 
@@ -2667,7 +2614,7 @@ void AppBase::CreateRaytracingPipeline() {
     std::vector<VkPipelineShaderStageCreateInfo> stages;
 
     //raygen
-    auto rgStage = _shader->LoadShaderProgram("Shaders/raytracingReflections/raygen.rgen.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+    auto rgStage = _shader->LoadShaderProgram("Shaders/raytracingMaterials/raygen.rgen.spv", VK_SHADER_STAGE_RAYGEN_BIT_KHR);
     VkRayTracingShaderGroupCreateInfoKHR raygenShaderGroup{};
     raygenShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     raygenShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2693,7 +2640,7 @@ void AppBase::CreateRaytracingPipeline() {
     stages.back().pSpecializationInfo = &specializationInfo;
 
     //miss
-    auto missStage = _shader->LoadShaderProgram("Shaders/raytracingReflections/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
+    auto missStage = _shader->LoadShaderProgram("Shaders/raytracingMaterials/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
     VkRayTracingShaderGroupCreateInfoKHR missShaderGroup{};
     missShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     missShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2706,7 +2653,7 @@ void AppBase::CreateRaytracingPipeline() {
     
 
     //closest hit
-    auto chStage = _shader->LoadShaderProgram("Shaders/raytracingReflections/closesthit.rchit.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+    auto chStage = _shader->LoadShaderProgram("Shaders/raytracingMaterials/closesthit.rchit.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
     VkRayTracingShaderGroupCreateInfoKHR closesthitShaderGroup{};
     closesthitShaderGroup.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
     closesthitShaderGroup.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
@@ -2762,10 +2709,9 @@ void AppBase::CreateShaderBindingTable() {
 
     const VkBufferUsageFlags bufferUsageFlags = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     const VkMemoryPropertyFlags propertyFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags, r_raygenShaderBindingTable.buffer, r_raygenShaderBindingTable.memory);
-    _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags, r_missShaderBindingTable.buffer, r_missShaderBindingTable.memory);
-    _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags, r_hitShaderBindingTable.buffer, r_hitShaderBindingTable.memory);
-
+    r_raygenShaderBindingTable = _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags);
+    r_missShaderBindingTable = _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags);
+    r_hitShaderBindingTable = _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags);
 
     vkMapMemory(_vulkanDevice->_device, r_raygenShaderBindingTable.memory, 0, VK_WHOLE_SIZE, 0, &r_raygenShaderBindingTable.mapped);
     vkMapMemory(_vulkanDevice->_device, r_missShaderBindingTable.memory, 0, VK_WHOLE_SIZE, 0, &r_missShaderBindingTable.mapped);
@@ -2774,16 +2720,16 @@ void AppBase::CreateShaderBindingTable() {
     memcpy(r_raygenShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * raygenShaderIndex, handleSize);
     memcpy(r_missShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * missShaderIndex, handleSize);
     memcpy(r_hitShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * hitShaderIndex, handleSize);
-
-    raygenRegion.deviceAddress = GetBufferDeviceAddress(r_raygenShaderBindingTable.buffer);
+    
+    raygenRegion.deviceAddress = r_raygenShaderBindingTable.GetBufferDeviceAddress(_vulkanDevice->_device);
     raygenRegion.stride = handleSizeAligned;
     raygenRegion.size = handleSizeAligned;
 
-    missRegion.deviceAddress = GetBufferDeviceAddress(r_missShaderBindingTable.buffer);
+    missRegion.deviceAddress = r_missShaderBindingTable.GetBufferDeviceAddress(_vulkanDevice->_device);
     missRegion.stride = handleSizeAligned;
     missRegion.size = handleSizeAligned;
 
-    hitRegion.deviceAddress = GetBufferDeviceAddress(r_hitShaderBindingTable.buffer);
+    hitRegion.deviceAddress = r_hitShaderBindingTable.GetBufferDeviceAddress(_vulkanDevice->_device);
     hitRegion.stride = handleAligned;
     hitRegion.size = handleAligned;
 }
@@ -2795,7 +2741,8 @@ void AppBase::CreateDescriptorSets() {
         { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR , 1 },
         { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE , 1 },
         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , 1 },
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 }
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 }
     };
 
     VkDescriptorPoolCreateInfo poolInfo{};
@@ -2820,68 +2767,110 @@ void AppBase::CreateDescriptorSets() {
     }
 
     //update descriptorSet
-    VkWriteDescriptorSetAccelerationStructureKHR accelerationInfo{};
-    accelerationInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-    accelerationInfo.accelerationStructureCount = 1;
-    accelerationInfo.pAccelerationStructures = &r_topLevelAS.handle;
+    std::array<VkWriteDescriptorSet, 6>writeDescriptorSetsInfo{};
+    {
+        VkWriteDescriptorSetAccelerationStructureKHR accelerationInfo{};
+        accelerationInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+        accelerationInfo.accelerationStructureCount = 1;
+        accelerationInfo.pAccelerationStructures = &r_topLevelAS.handle;
+
+        writeDescriptorSetsInfo[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSetsInfo[0].pNext = &accelerationInfo;
+        writeDescriptorSetsInfo[0].dstSet = r_descriptorSet;
+        writeDescriptorSetsInfo[0].dstBinding = 0;
+        writeDescriptorSetsInfo[0].descriptorCount = 1;
+        writeDescriptorSetsInfo[0].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    }
+
+    {
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageView = r_strageImage.view;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+        writeDescriptorSetsInfo[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSetsInfo[1].dstSet = r_descriptorSet;
+        writeDescriptorSetsInfo[1].dstBinding = 1;
+        writeDescriptorSetsInfo[1].descriptorCount = 1;
+        writeDescriptorSetsInfo[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        writeDescriptorSetsInfo[1].pImageInfo = &imageInfo;
+    }
     
-    std::array<VkWriteDescriptorSet, 5>writeDescriptorSet{};
-    writeDescriptorSet[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet[0].pNext = &accelerationInfo;
-    writeDescriptorSet[0].dstSet = r_descriptorSet;
-    writeDescriptorSet[0].dstBinding = 0;
-    writeDescriptorSet[0].descriptorCount = 1;
-    writeDescriptorSet[0].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    {
+        VkDescriptorBufferInfo sceneInfo{};
+        sceneInfo.buffer = r_ubo.buffer;
+        sceneInfo.offset = 0;
+        sceneInfo.range = VK_WHOLE_SIZE;
 
-    VkDescriptorImageInfo imageInfo{};
-    imageInfo.imageView = r_strageImage.view;
-    imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        writeDescriptorSetsInfo[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSetsInfo[2].dstSet = r_descriptorSet;
+        writeDescriptorSetsInfo[2].dstBinding = 2;
+        writeDescriptorSetsInfo[2].descriptorCount = 1;
+        writeDescriptorSetsInfo[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writeDescriptorSetsInfo[2].pBufferInfo = &sceneInfo;
+    }
 
-    writeDescriptorSet[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet[1].dstSet = r_descriptorSet;
-    writeDescriptorSet[1].dstBinding = 1;
-    writeDescriptorSet[1].descriptorCount = 1;
-    writeDescriptorSet[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    writeDescriptorSet[1].pImageInfo = &imageInfo;
+    {
+        VkDescriptorImageInfo bgImageInfo{};
+        bgImageInfo.imageView = r_cubeMap.view;
+        bgImageInfo.sampler = r_cubeMap.sampler;
+        bgImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-    VkDescriptorBufferInfo bufferInfo{};
-    bufferInfo.buffer = r_ubo.buffer;
-    bufferInfo.offset = 0;
-    bufferInfo.range = VK_WHOLE_SIZE;
+        writeDescriptorSetsInfo[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSetsInfo[3].dstSet = r_descriptorSet;
+        writeDescriptorSetsInfo[3].dstBinding = 3;
+        writeDescriptorSetsInfo[3].descriptorCount = 1;
+        writeDescriptorSetsInfo[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writeDescriptorSetsInfo[3].pImageInfo = &bgImageInfo;
+    }
 
-    writeDescriptorSet[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet[2].dstSet = r_descriptorSet;
-    writeDescriptorSet[2].dstBinding = 2;
-    writeDescriptorSet[2].descriptorCount = 1;
-    writeDescriptorSet[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    writeDescriptorSet[2].pBufferInfo = &bufferInfo;
+    {
+        VkDescriptorBufferInfo primMeshInfo{};
+        primMeshInfo.buffer = r_objectStorageBuffer.buffer;
+        primMeshInfo.offset = 0;
+        primMeshInfo.range = VK_WHOLE_SIZE;
 
-    //todo:ƒCƒ[ƒW‚Ìì¬
-    VkDescriptorImageInfo bgImageInfo{};
-    bgImageInfo.imageView = s_model->_vertices.buffer;
-    bgImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        writeDescriptorSetsInfo[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSetsInfo[4].dstSet = r_descriptorSet;
+        writeDescriptorSetsInfo[4].dstBinding = 4;
+        writeDescriptorSetsInfo[4].descriptorCount = 1;
+        writeDescriptorSetsInfo[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writeDescriptorSetsInfo[4].pBufferInfo = &primMeshInfo;
+    }
 
-    writeDescriptorSet[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet[3].dstSet = r_descriptorSet;
-    writeDescriptorSet[3].dstBinding = 3;
-    writeDescriptorSet[3].descriptorCount = 1;
-    writeDescriptorSet[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSet[3].pImageInfo = &bgImageInfo;
+    {
+        VkDescriptorBufferInfo materialInfo{};
+        materialInfo.buffer = r_materialStorageBuffer.buffer;
+        materialInfo.offset = 0;
+        materialInfo.range = VK_WHOLE_SIZE;
 
-    VkDescriptorBufferInfo primMeshInfo{};
-    primMeshInfo.buffer = s_model->_indices.buffer;
-    primMeshInfo.offset = 0;
-    primMeshInfo.range = VK_WHOLE_SIZE;
+        writeDescriptorSetsInfo[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSetsInfo[5].dstSet = r_descriptorSet;
+        writeDescriptorSetsInfo[5].dstBinding = 5;
+        writeDescriptorSetsInfo[5].descriptorCount = 1;
+        writeDescriptorSetsInfo[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writeDescriptorSetsInfo[5].pBufferInfo = &materialInfo;
+    }
 
-    writeDescriptorSet[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet[4].dstSet = r_descriptorSet;
-    writeDescriptorSet[4].dstBinding = 4;
-    writeDescriptorSet[4].descriptorCount = 1;
-    writeDescriptorSet[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSet[4].pBufferInfo = &primMeshInfo;
+    vkUpdateDescriptorSets(_vulkanDevice->_device, static_cast<uint32_t>(writeDescriptorSetsInfo.size()), writeDescriptorSetsInfo.data(), 0, VK_NULL_HANDLE);
 
-    vkUpdateDescriptorSets(_vulkanDevice->_device, static_cast<uint32_t>(writeDescriptorSet.size()), writeDescriptorSet.data(), 0, VK_NULL_HANDLE);
+    {
+        std::vector<VkDescriptorImageInfo> texutureInfo(r_textures.size());
+        for (auto i = 0; i < static_cast<uint32_t>(r_textures.size()); i++) 
+        {
+            texutureInfo[i].imageView = r_textures[i].view;
+            texutureInfo[i].sampler = r_textures[i].sampler;
+            texutureInfo[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        }
+        VkWriteDescriptorSet textureWriteDescriptorSetsInfo{};
+        textureWriteDescriptorSetsInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        textureWriteDescriptorSetsInfo.dstSet = r_descriptorSet;
+        textureWriteDescriptorSetsInfo.dstBinding = 6;
+        textureWriteDescriptorSetsInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        textureWriteDescriptorSetsInfo.descriptorCount = static_cast<uint32_t>(r_textures.size());
+        textureWriteDescriptorSetsInfo.pImageInfo = texutureInfo.data();
 
+        vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &textureWriteDescriptorSetsInfo, 0, VK_NULL_HANDLE);
+    }
 }
 
 void AppBase::InitRayTracing() {

@@ -98,7 +98,7 @@ public:
         uint32_t index = 0;
     };
 
-    struct ObjectParam
+    struct PrimParam
     {
         uint64_t indexBufferAddress;
         uint64_t vertexBufferAddress;
@@ -108,8 +108,10 @@ public:
     struct UniformBlock {
         glm::mat4 viewInverse;
         glm::mat4 projInverse;
-        glm::vec4 lightPos;
-        uint32_t vertexSize;
+        glm::vec4 lightDirection;
+        glm::vec4 lightColor;
+        glm::vec4 ambientColor;
+        glm::vec3 cameraPosition;
     }_uniformData;
 
     enum ShaderGroups {
@@ -192,16 +194,6 @@ public:
     * @brief    exampleを使ったImGUIの表示
     */
     void InitializeGUI();
-
-    /**
-    * @brief    イメージの作成
-    */
-    void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
-
-    /**
-    * @brief    イメージビューを作成する
-    */
-    VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 
     /**
     * @brief    深度リソースを作成する
