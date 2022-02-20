@@ -35,11 +35,10 @@ public:
     VkDeviceMemory memory;
     VkBuffer buffer;
 
-
-    /**
-    * @brief    AccelerationStructureバッファの作成
-    */
+    AccelerationStructure(){};
+    AccelerationStructure(VulkanDevice* device);
     void CreateAccelerationStructureBuffer(VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount);
+    void Destroy();
 
 private:
     VulkanDevice* vulkanDevice;
@@ -68,8 +67,8 @@ public:
 
         uint32_t vertexStride = 0;
 
-        AccelerationStructure blas;
-        void Connect(Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer);
+        AccelerationStructure* blas;
+        void Connect(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer);
         void BuildBLAS(VulkanDevice* vulkanDevice);
 
     };
@@ -233,7 +232,7 @@ public:
     //あとでdeviceクラスに移動
     Image CreateTextureCube(const wchar_t* fileNames[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
-    Image CreateTextureImageAndView(uint32_t width, uint32_t height, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
+    Image CreateTextureImageAndView(uint32_t width, uint32_t height, VkFormat format, VkImageAspectFlags aspectFlags, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
     Image Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
@@ -389,9 +388,7 @@ public:
     uint32_t _mipLevels;
 
     //depth
-    VkImage _depthImage;
-    VkDeviceMemory _depthImageMemory;
-    VkImageView _depthImageView;
+    Image _depthImage;
 
     VkCommandPool _commandPool;
     std::vector<VkCommandBuffer> _commandBuffers;

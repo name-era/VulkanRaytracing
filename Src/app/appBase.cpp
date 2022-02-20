@@ -4,7 +4,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #include <tiny_gltf.h>
-#include <stb_image.h>
 
 /*******************************************************************************************************************
 *                                             glTF
@@ -159,19 +158,14 @@ namespace glTF {
         std::vector<Primitive*> primitives;
         std::string name;
 
-        struct UniformBuffer {
-            VkBuffer buffer;
-            VkDeviceMemory memory;
-            VkDescriptorSet descriptorSet;
-            void* mapped;
-        }uniformBuffer;
-
+        Initializers::Buffer uniformBuffer;
         struct UniformBlock {
             glm::mat4 matrix;
             glm::mat4 jointMatrix[64]{};
             float jointcount{ 0 };
         }uniformBlock;
 
+        VkDescriptorSet descriptorSet;
         VulkanDevice* vulkanDevice;
         Mesh(VulkanDevice* device, glm::mat4 matrix);
         ~Mesh();
@@ -557,11 +551,10 @@ glTF::Primitive::Primitive(uint32_t firstIndex, uint32_t indexCount, Material& m
 glTF::Mesh::Mesh(VulkanDevice* device, glm::mat4 matrix) {
     vulkanDevice = device;
     uniformBlock.matrix = matrix;
-    vulkanDevice->CreateBuffer(
+    uniformBuffer = vulkanDevice->CreateBuffer(
         sizeof(uniformBlock),
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        uniformBuffer.buffer, uniformBuffer.memory
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
     vkMapMemory(vulkanDevice->_device, uniformBuffer.memory, 0, sizeof(uniformBlock), 0, &uniformBuffer.mapped);
 }
@@ -935,7 +928,7 @@ void glTF::Model::CreateNodeDescriptorSets(glTF::Node* node) {
     allocInfo.descriptorPool = _descriptorPool;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &_descriptorSetLayout.ubo;
-    if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &node->mesh->uniformBuffer.descriptorSet) != VK_SUCCESS) {
+    if (vkAllocateDescriptorSets(_vulkanDevice->_device, &allocInfo, &node->mesh->descriptorSet) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate descriptor sets!");
     }
 
@@ -946,7 +939,7 @@ void glTF::Model::CreateNodeDescriptorSets(glTF::Node* node) {
     bufferInfo.range = VK_WHOLE_SIZE;
 
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = node->mesh->uniformBuffer.descriptorSet;
+    descriptorWrite.dstSet = node->mesh->descriptorSet;
     descriptorWrite.dstBinding = 0;
     descriptorWrite.dstArrayElement = 0;
     descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1687,12 +1680,24 @@ void AppBase::InitializeGUI() {
 void AppBase::CreateDepthResources() {
 
     VkFormat depthFormat = _vulkanDevice->FindDepthFormat();
-    CreateImage(_swapchain->_extent.width, _swapchain->_extent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _depthImage, _depthImageMemory);
+
     if (depthFormat > VK_FORMAT_D16_UNORM_S8_UINT) {
-        _depthImageView = CreateImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_STENCIL_BIT, 1);
+        _depthImage = CreateTextureImageAndView(
+            WIDTH, HEIGHT,
+            depthFormat,
+            VK_IMAGE_ASPECT_STENCIL_BIT,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
     }
     else {
-        _depthImageView = CreateImageView(_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+        _depthImage = CreateTextureImageAndView(
+            WIDTH, HEIGHT,
+            depthFormat,
+            VK_IMAGE_ASPECT_DEPTH_BIT,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
     }
 
 }
@@ -1705,7 +1710,7 @@ void AppBase::CreateFramebuffers() {
         
         std::array<VkImageView, 2> attachments = {
             _swapchain->_swapchainBuffers[i].imageview,
-            _depthImageView
+            _depthImage.view
         };
 
         VkFramebufferCreateInfo framebufferInfo{};
@@ -1739,7 +1744,6 @@ void AppBase::CreateCommandBuffers() {
 
 void AppBase::BuildCommandBuffers(bool renderImgui) {
 
-    //コマンドバッファへの記録の開始
     for (size_t i = 0; i < _commandBuffers.size(); i++) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1748,7 +1752,7 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-        //レイトレーシングを行う
+        //execute raytrace
         vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
         vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, 0, nullptr);
         VkStridedDeviceAddressRegionKHR callableSbtEntry{};
@@ -1758,9 +1762,8 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             WIDTH, HEIGHT, 1
         );
 
-        //レイトレーシングの結果をバックバッファにコピーする
-
-        //スワップチェーンイメージを転送dstに設定
+        //copy raytracing result to back buffer
+        //set image layout as transfer dst
         _vulkanDevice->SetImageRayout(
             _commandBuffers[i],
             _swapchain->_swapchainBuffers[i].image,
@@ -1769,7 +1772,7 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             1
         );
 
-        //レイトレーシング結果イメージを転送srcに設定
+        //set raytracing result image as transtfer src
         _vulkanDevice->SetImageRayout(
             _commandBuffers[i],
             r_strageImage.image,
@@ -1785,8 +1788,7 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
 
         vkCmdCopyImage(_commandBuffers[i], r_strageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, _swapchain->_swapchainBuffers[i].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-        //レイアウトを元に戻す
-
+        //revert layout to previous layout
         _vulkanDevice->SetImageRayout(
             _commandBuffers[i],
             _swapchain->_swapchainBuffers[i].image,
@@ -1822,8 +1824,6 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
         if (renderImgui) {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _commandBuffers[i]);
         }
-        
-        //s_model->Draw(_commandBuffers[i], _pipelineLayout);
 
         vkCmdEndRenderPass(_commandBuffers[i]);
 
@@ -1898,6 +1898,10 @@ void AppBase::Initialize() {
 /*******************************************************************************************************************
 *                                             レイトレーシング
 ********************************************************************************************************************/
+AccelerationStructure::AccelerationStructure(VulkanDevice* device)
+{
+    vulkanDevice = device;
+}
 
 void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount) {
 
@@ -1997,9 +2001,16 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
     vkFreeMemory(vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
-void AppBase::PolygonMesh::Connect(Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer) {
+void AccelerationStructure::Destroy() {
+    vkDestroyBuffer(vulkanDevice->_device, buffer, nullptr);
+    vkFreeMemory(vulkanDevice->_device, memory, nullptr);
+    vkDestroyAccelerationStructureKHR(vulkanDevice->_device, handle, nullptr);
+}
+
+void AppBase::PolygonMesh::Connect(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer) {
     vertexBuffer = vertBuffer;
     indexBuffer = idxBuffer;
+    blas = new AccelerationStructure(vulkandevice);
 }
 
 void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
@@ -2025,11 +2036,10 @@ void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
     geometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
     geometryInfo.geometry.triangles.transformData.deviceAddress = 0;
     geometryInfo.geometry.triangles.transformData.hostAddress = nullptr;
-
-    blas.CreateAccelerationStructureBuffer(geometryInfo, numTriangles);    
+    blas->CreateAccelerationStructureBuffer(geometryInfo, numTriangles);
 }
 
-AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t height, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
+AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t height, VkFormat format, VkImageAspectFlags aspectFlags, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
     //create image
     usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     VkImageCreateInfo imageInfo{};
@@ -2040,7 +2050,7 @@ AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t heigh
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
-    imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    imageInfo.format = format;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = usage;
@@ -2072,9 +2082,9 @@ AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t heigh
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = imageResource.image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = imageInfo.format;
+    viewInfo.format = format;
     viewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
@@ -2088,7 +2098,6 @@ AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t heigh
 }
 
 AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
-    stbi_uc* image = nullptr;
     std::vector<char> binImage;
     std::ifstream infile(fileNames, std::ios::binary);
     if (!infile) {
@@ -2100,7 +2109,7 @@ AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFl
     
     int width, height;
     auto image = stbi_load_from_memory(
-        reinterpret_cast<uint8_t*>(binImage.data()),
+        reinterpret_cast<const stbi_uc*>(binImage.data()),
         int(binImage.size()),
         &width,
         &height,
@@ -2108,7 +2117,13 @@ AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFl
         4
     );
 
-    Image textureResource = CreateTextureImageAndView(width, height, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT, memProps);
+    Image textureResource = CreateTextureImageAndView(
+        width, height,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        memProps
+    );
 
 
     //staging buffer
@@ -2122,7 +2137,7 @@ AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFl
 
     void* data;
     vkMapMemory(_vulkanDevice->_device, bufferSrc.memory, 0, VK_WHOLE_SIZE, 0, &data);
-    memcpy(data, bufferSrc.buffer, imageSize);
+    memcpy(data, image, imageSize);
     vkUnmapMemory(_vulkanDevice->_device, bufferSrc.memory);
 
     _vulkanDevice->TransitionImageLayout(textureResource.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
@@ -2306,10 +2321,10 @@ void AppBase::PrepareMesh() {
     r_meshGlTF.indexBuffer = s_model->_indices;
     
     //ceiling
-    std::vector <primitive::Vertex> vertices;
+    std::vector <PrimitiveMesh::Vertex> vertices;
     std::vector<uint32_t> indices;
-    primitive::GetCeiling(vertices, indices);
-    uint32_t vertexSize = static_cast<uint32_t>(vertices.size() * sizeof(primitive::Vertex));
+    PrimitiveMesh::GetCeiling(vertices, indices);
+    uint32_t vertexSize = static_cast<uint32_t>(vertices.size() * sizeof(PrimitiveMesh::Vertex));
     uint32_t indexSize = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
 
     //vertex
@@ -2357,7 +2372,7 @@ void AppBase::PrepareMesh() {
     vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
 
-    r_meshPlane.vertexStride = uint32_t(sizeof(primitive::Vertex));
+    r_meshPlane.vertexStride = uint32_t(sizeof(PrimitiveMesh::Vertex));
 }
 
 void AppBase::PrepareTexture() {
@@ -2399,14 +2414,14 @@ void AppBase::CreateSceneObject() {
 
 void AppBase::CreateSceneBuffers() {
     
-    std::vector<ObjectParam> objParams;
+    std::vector<PrimParam> objParams;
     std::vector<Material> materialParams;
 
     for (auto obj : r_sceneObjects) {
         auto mesh = obj.mesh;
-        ObjectParam objParam;
-        objParam.vertexBufferAddress = mesh->vertexBuffer.GetBufferDeviceAddress();
-        objParam.indexBufferAddress = mesh->indexBuffer.GetBufferDeviceAddress();
+        PrimParam objParam;
+        objParam.vertexBufferAddress = mesh->vertexBuffer.GetBufferDeviceAddress(_vulkanDevice->_device);
+        objParam.indexBufferAddress = mesh->indexBuffer.GetBufferDeviceAddress(_vulkanDevice->_device);
         objParam.materialIndex = uint32_t(materialParams.size());
         objParams.push_back(objParam);
         materialParams.push_back(obj.material);
@@ -2438,7 +2453,7 @@ void AppBase::CreateSceneBuffers() {
 
     //scene objects
     {
-        auto objectStorageBufferSize = static_cast<uint32_t>(sizeof(ObjectParam) * objParams.size());
+        auto objectStorageBufferSize = static_cast<uint32_t>(sizeof(PrimParam) * objParams.size());
         r_objectStorageBuffer = _vulkanDevice->CreateBuffer(
             objectStorageBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -2472,7 +2487,7 @@ void AppBase::CreateTLAS() {
         asInstance.transform = utils::ConvertFrom4x4To3x4(obj.transform);
         asInstance.instanceCustomIndex = obj.index;
         asInstance.instanceShaderBindingTableRecordOffset = obj.offset;
-        asInstance.accelerationStructureReference = obj.mesh->blas.deviceAddress;
+        asInstance.accelerationStructureReference = obj.mesh->blas->deviceAddress;
         instances.push_back(asInstance);
     }
 
@@ -2488,7 +2503,7 @@ void AppBase::CreateTLAS() {
     vkUnmapMemory(_vulkanDevice->_device, r_instanceBuffer.memory);
 
     VkDeviceOrHostAddressConstKHR instanceDataDeviceAddress{};
-    instanceDataDeviceAddress.deviceAddress = r_instanceBuffer.GetBufferDeviceAddress();
+    instanceDataDeviceAddress.deviceAddress = r_instanceBuffer.GetBufferDeviceAddress(_vulkanDevice->_device);
 
     VkAccelerationStructureGeometryKHR geometryInfo{};
     geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -2502,9 +2517,11 @@ void AppBase::CreateTLAS() {
 }
 
 void AppBase::CreateStrageImage() {
-    
-    CreateTextureImageAndView(
+
+    r_strageImage = CreateTextureImageAndView(
         WIDTH, HEIGHT,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_ASPECT_COLOR_BIT,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
@@ -2855,7 +2872,7 @@ void AppBase::CreateDescriptorSets() {
 
     {
         std::vector<VkDescriptorImageInfo> texutureInfo(r_textures.size());
-        for (auto i = 0; i < static_cast<uint32_t>(r_textures.size()); i++) 
+        for (uint32_t i = 0; i < uint32_t(r_textures.size()); i++) 
         {
             texutureInfo[i].imageView = r_textures[i].view;
             texutureInfo[i].sampler = r_textures[i].sampler;
@@ -3105,9 +3122,7 @@ void AppBase::CleanupWindow() {
 
 void AppBase::CleanupSwapchain() {
 
-    vkDestroyImageView(_vulkanDevice->_device, _depthImageView, nullptr);
-    vkDestroyImage(_vulkanDevice->_device, _depthImage, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, _depthImageMemory, nullptr);
+    _depthImage.Destroy(_vulkanDevice->_device);
 
     _swapchain->Cleanup();
     for (auto frameBuffer : _frameBuffers) {
@@ -3115,9 +3130,6 @@ void AppBase::CleanupSwapchain() {
     }
 
     vkFreeCommandBuffers(_vulkanDevice->_device, _vulkanDevice->_commandPool, (uint32_t)_commandBuffers.size(), _commandBuffers.data());
-
-    //vkDestroyPipeline(_vulkanDevice->_device, _pipeline, nullptr);
-    //vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
     s_model->Cleanup();
 }
@@ -3134,9 +3146,10 @@ void AppBase::Destroy() {
     r_missShaderBindingTable.Destroy(_vulkanDevice->_device);
     r_hitShaderBindingTable.Destroy(_vulkanDevice->_device);
 
-    vkDestroyBuffer(_vulkanDevice->_device, maingltf.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, maingltf.memory, nullptr);
-    vkDestroyAccelerationStructureKHR(_vulkanDevice->_device, maingltf.handle, nullptr);
+    r_meshGlTF.vertexBuffer.Destroy(_vulkanDevice->_device);
+    r_meshGlTF.indexBuffer.Destroy(_vulkanDevice->_device);
+
+
     vkDestroyBuffer(_vulkanDevice->_device, r_topLevelAS.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, r_topLevelAS.memory, nullptr);
     vkDestroyAccelerationStructureKHR(_vulkanDevice->_device, r_topLevelAS.handle, nullptr);

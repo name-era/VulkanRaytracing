@@ -118,8 +118,11 @@ void Gui::PrepareImage() {
     io.Fonts->GetTexDataAsRGBA32(&fontData, &texWidth, &texHeight);
     VkDeviceSize uploadSize = texWidth * texHeight * 4 * sizeof(char);
 
-    Initializers::Buffer stagingBuffer;
-    _vulkanDevice->CreateBuffer(uploadSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer.buffer, stagingBuffer.memory);
+    Initializers::Buffer stagingBuffer = _vulkanDevice->CreateBuffer(
+        uploadSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
 
     void* data;
     vkMapMemory(_vulkanDevice->_device, stagingBuffer.memory, 0, uploadSize, 0, &data);
@@ -396,7 +399,11 @@ bool Gui::UpdateBuffers() {
     //Vertex buffer
     if ((_vertexBuffer.buffer == VK_NULL_HANDLE) || (_vertexBuffer.count < imDrawData->TotalVtxCount)) {
 
-        _vulkanDevice->CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, _vertexBuffer.buffer, _vertexBuffer.memory);
+        _vertexBuffer = _vulkanDevice->CreateBuffer(
+            vertexBufferSize,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+        );
         _vertexBuffer.count = imDrawData->TotalVtxCount;
         
         vkMapMemory(_vulkanDevice->_device, _vertexBuffer.memory, 0, vertexBufferSize, 0, &_vertexBuffer.mapped);
@@ -406,7 +413,11 @@ bool Gui::UpdateBuffers() {
     // Index buffer
     if ((_indexBuffer.buffer == VK_NULL_HANDLE) || (_indexBuffer.count < imDrawData->TotalIdxCount)) {
 
-        _vulkanDevice->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, _indexBuffer.buffer, _indexBuffer.memory);
+        _indexBuffer = _vulkanDevice->CreateBuffer(
+            indexBufferSize,
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+        );
         _indexBuffer.count= imDrawData->TotalIdxCount;
 
         vkMapMemory(_vulkanDevice->_device, _indexBuffer.memory, 0, indexBufferSize, 0, &_indexBuffer.mapped);
