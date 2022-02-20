@@ -132,8 +132,6 @@ void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
         _swapchainBuffers[i].image = swapchainImages[i];
     }
 
-    _colorFormat = surfaceFormat.format;
-
 
     //create swapchain imageveiws
     for (uint32_t i = 0; i < _imageCount; i++) {
@@ -141,7 +139,7 @@ void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = _swapchainBuffers[i].image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = _colorFormat;
+        viewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = 1;

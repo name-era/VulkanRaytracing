@@ -30,18 +30,18 @@ class AccelerationStructure {
 
 public:
 
-    VkAccelerationStructureKHR handle;
-    uint64_t deviceAddress = 0;
-    VkDeviceMemory memory;
-    VkBuffer buffer;
-
     AccelerationStructure(){};
     AccelerationStructure(VulkanDevice* device);
     void CreateAccelerationStructureBuffer(VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount);
     void Destroy();
+    
+    VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
+    uint64_t deviceAddress = 0;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkBuffer buffer = VK_NULL_HANDLE;
 
 private:
-    VulkanDevice* vulkanDevice;
+    VulkanDevice* vulkanDevice = VK_NULL_HANDLE;
 };
 
 class AppBase
@@ -62,14 +62,14 @@ public:
     };
 
     struct PolygonMesh {
+
+        PolygonMesh(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer, uint32_t stride);
+        void BuildBLAS(VulkanDevice* vulkanDevice);
+        
         AccelerationStructure* blas;
         Initializers::Buffer vertexBuffer;
         Initializers::Buffer indexBuffer;
         uint32_t vertexStride = 0;
-
-        void Connect(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer, uint32_t stride);
-        void BuildBLAS(VulkanDevice* vulkanDevice);
-
     };
 
     enum MaterialType {
@@ -414,8 +414,8 @@ public:
     Initializers::Buffer r_hitShaderBindingTable;
 
 
-    PolygonMesh r_meshGlTF;
-    PolygonMesh r_meshPlane;
+    PolygonMesh* r_meshGlTF;
+    PolygonMesh* r_meshPlane;
     SceneObject r_gltfModel;
     SceneObject r_ceiling;
     std::vector<SceneObject> r_sceneObjects;

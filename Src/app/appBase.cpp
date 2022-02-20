@@ -137,7 +137,7 @@ namespace glTF {
         float metallicFactor = 1.0f;
 
         enum AlphaMode { ALPHA_OPAQUE, ALPHA_MASK, ALPHA_BLEND };
-        AlphaMode alphaMode = ALPHA_OPAQUE;
+        int alphaMode = ALPHA_OPAQUE;
         float alphaCutoff = 1.0f;
 
         VkDescriptorSet descriptorSet;
@@ -145,10 +145,10 @@ namespace glTF {
     };
 
     struct Primitive {
-        uint32_t firstIndex;
-        uint32_t indexCount;
-        uint32_t firstVertex;
-        uint32_t vertexCount;
+        uint32_t firstIndex = 0;
+        uint32_t indexCount = 0;
+        uint32_t firstVertex = 0;
+        uint32_t vertexCount = 0;
         Material& material;
 
         Primitive(uint32_t firstIndex, uint32_t indexCount, Material& material);
@@ -1166,10 +1166,9 @@ glTF::Model* glTF::Model::GetglTF() {
 /*******************************************************************************************************************
 *                                             AppBase
 ********************************************************************************************************************/
-AppBase::AppBase() :
-    _framebufferResized(false)
+AppBase::AppBase()
 {
-
+    _framebufferResized = false;
 }
 
 /*******************************************************************************************************************
@@ -2007,7 +2006,7 @@ void AccelerationStructure::Destroy() {
     vkDestroyAccelerationStructureKHR(vulkanDevice->_device, handle, nullptr);
 }
 
-void AppBase::PolygonMesh::Connect(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer, uint32_t stride) {
+AppBase::PolygonMesh::PolygonMesh(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer, uint32_t stride) {
     blas = new AccelerationStructure(vulkandevice);
     vertexBuffer = vertBuffer;
     indexBuffer = idxBuffer;
@@ -2319,7 +2318,7 @@ void AppBase::PrepareMesh() {
         const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
         s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
 
-        r_meshGlTF.Connect(_vulkanDevice, s_model->_vertices, s_model->_indices, 0);
+        r_meshGlTF = new PolygonMesh(_vulkanDevice, s_model->_vertices, s_model->_indices, 0);
     }
 
     
@@ -2382,7 +2381,7 @@ void AppBase::PrepareMesh() {
         vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
         vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
 
-        r_meshPlane.Connect(_vulkanDevice, planeVertexBuffer, planeIndexBuffer, uint32_t(sizeof(PrimitiveMesh::Vertex)));
+        r_meshPlane = new PolygonMesh(_vulkanDevice, planeVertexBuffer, planeIndexBuffer, uint32_t(sizeof(PrimitiveMesh::Vertex)));
     }
 
 }
@@ -2405,18 +2404,18 @@ void AppBase::PrepareTexture() {
 }
 
 void AppBase::CreateBLAS() {
-    r_meshGlTF.BuildBLAS(_vulkanDevice);
-    r_meshPlane.BuildBLAS(_vulkanDevice);
+    r_meshGlTF->BuildBLAS(_vulkanDevice);
+    r_meshPlane->BuildBLAS(_vulkanDevice);
 }
 
 void AppBase::CreateSceneObject() {
     //glTF model
     r_gltfModel.transform = glm::mat4(1.0f);
-    r_gltfModel.mesh = &r_meshGlTF;
+    r_gltfModel.mesh = r_meshGlTF;
 
     //ceiling
     r_ceiling.transform = glm::mat4(1.0f);
-    r_ceiling.mesh = &r_meshPlane;
+    r_ceiling.mesh = r_meshPlane;
     r_ceiling.material.textureIndex = TexID_Floor;
 
     r_sceneObjects.clear();
@@ -2441,23 +2440,25 @@ void AppBase::CreateSceneBuffers() {
 
     //materials
     {
+
         auto materialStorageBufferSize = static_cast<uint32_t>(sizeof(Material) * materialParams.size());
-        r_materialStorageBuffer = _vulkanDevice->CreateBuffer(
-            materialStorageBufferSize,
-            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-
-        void* data;
-        vkMapMemory(_vulkanDevice->_device, r_materialStorageBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
-        memcpy(data, materialParams.data(), materialStorageBufferSize);
-        vkUnmapMemory(_vulkanDevice->_device, r_materialStorageBuffer.memory);
-
         auto stagingBuffer = _vulkanDevice->CreateBuffer(
             static_cast<uint32_t>(sizeof(Material) * materialParams.size()),
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
+
+        void* data;
+        vkMapMemory(_vulkanDevice->_device, stagingBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
+        memcpy(data, materialParams.data(), materialStorageBufferSize);
+        vkUnmapMemory(_vulkanDevice->_device, stagingBuffer.memory);
+
+        r_materialStorageBuffer = _vulkanDevice->CreateBuffer(
+            materialStorageBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+
 
         //write info to storage buffer
         _vulkanDevice->CopyBuffer(stagingBuffer.buffer, r_materialStorageBuffer.buffer, materialStorageBufferSize);
@@ -2466,19 +2467,20 @@ void AppBase::CreateSceneBuffers() {
     //scene objects
     {
         auto objectStorageBufferSize = static_cast<uint32_t>(sizeof(PrimParam) * objParams.size());
-        r_objectStorageBuffer = _vulkanDevice->CreateBuffer(
-            objectStorageBufferSize,
+        auto stagingBuffer = _vulkanDevice->CreateBuffer(
+            static_cast<uint32_t>(sizeof(Material) * materialParams.size()),
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
 
         void* data;
-        vkMapMemory(_vulkanDevice->_device, r_objectStorageBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
+        vkMapMemory(_vulkanDevice->_device, stagingBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
         memcpy(data, materialParams.data(), objectStorageBufferSize);
-        vkUnmapMemory(_vulkanDevice->_device, r_objectStorageBuffer.memory);
+        vkUnmapMemory(_vulkanDevice->_device, stagingBuffer.memory);
 
-        auto stagingBuffer = _vulkanDevice->CreateBuffer(
-            static_cast<uint32_t>(sizeof(Material) * materialParams.size()),
+
+        r_objectStorageBuffer = _vulkanDevice->CreateBuffer(
+            objectStorageBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
@@ -3158,8 +3160,8 @@ void AppBase::Destroy() {
     r_missShaderBindingTable.Destroy(_vulkanDevice->_device);
     r_hitShaderBindingTable.Destroy(_vulkanDevice->_device);
 
-    r_meshGlTF.vertexBuffer.Destroy(_vulkanDevice->_device);
-    r_meshGlTF.indexBuffer.Destroy(_vulkanDevice->_device);
+    r_meshGlTF->vertexBuffer.Destroy(_vulkanDevice->_device);
+    r_meshGlTF->indexBuffer.Destroy(_vulkanDevice->_device);
 
 
     vkDestroyBuffer(_vulkanDevice->_device, r_topLevelAS.buffer, nullptr);

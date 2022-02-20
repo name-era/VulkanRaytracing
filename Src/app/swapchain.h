@@ -15,7 +15,7 @@ public:
 
     struct SwapChainSupportDetails {
         //基本的な表面機能（スワップチェーン内の画像の最小最大数、画像の最小最大幅と高さ）
-        VkSurfaceCapabilitiesKHR capabilities;
+        VkSurfaceCapabilitiesKHR capabilities = {};
         //表面フォーマット（ピクセルフォーマット、色空間）
         std::vector<VkSurfaceFormatKHR> formats;
         //利用可能なプレゼンテーションモード
@@ -79,20 +79,16 @@ public:
     void Destroy();
 
 
-    VkExtent2D _extent;
-    uint32_t _imageCount;
-    uint32_t _minImageCount;
-    VkFormat _colorFormat;
+    VkExtent2D _extent = { 0,0 };
+    uint32_t _imageCount = 0;
+    uint32_t _minImageCount = 0;
     std::vector<SwapchianBuffer> _swapchainBuffers;
-    VkSwapchainKHR _swapchain;
+    VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
 
 private:
-    GLFWwindow* _window;
-    VkInstance _instance;
-    VkDevice _device;
-    VkPhysicalDevice _physicalDevice;
-    VkSurfaceKHR _surface;
-
-    
-
+    GLFWwindow* _window = nullptr;
+    VkInstance _instance = VK_NULL_HANDLE;
+    VkDevice _device = VK_NULL_HANDLE;
+    VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;
+    VkSurfaceKHR _surface = VK_NULL_HANDLE;
 };

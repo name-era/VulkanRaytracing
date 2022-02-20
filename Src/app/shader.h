@@ -69,6 +69,6 @@ public:
     uint32_t imageCount = 0;
 
 private:
-    VulkanDevice* _vulkanDevice;
+    VulkanDevice* _vulkanDevice = VK_NULL_HANDLE;
 
 };

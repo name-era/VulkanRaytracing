@@ -26,9 +26,9 @@ struct VulkanDevice {
 
     struct QueueFamilyIndices
     {
-        uint32_t graphics;
-        uint32_t compute;
-        uint32_t transfer;
+        uint32_t graphics = 0;
+        uint32_t compute = 0;
+        uint32_t transfer = 0;
     }_queueFamilyIndices;
 
     /**
