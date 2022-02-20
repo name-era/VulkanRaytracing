@@ -62,13 +62,12 @@ public:
     };
 
     struct PolygonMesh {
+        AccelerationStructure* blas;
         Initializers::Buffer vertexBuffer;
         Initializers::Buffer indexBuffer;
-
         uint32_t vertexStride = 0;
 
-        AccelerationStructure* blas;
-        void Connect(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer);
+        void Connect(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer, uint32_t stride);
         void BuildBLAS(VulkanDevice* vulkanDevice);
 
     };

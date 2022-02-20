@@ -1031,7 +1031,6 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
 
     //vertex buffer
     VkDeviceSize vertexBufferSize = vertexBuffer.size() * sizeof(Vertex);
-    _vertices.count = static_cast<uint32_t>(vertexBuffer.size());
 
     Initializers::Buffer vertexStaging;
     vertexStaging = _vulkanDevice->CreateBuffer(
@@ -1050,6 +1049,7 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | memoryPropertyFlags,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
+    _vertices.count = static_cast<uint32_t>(vertexBuffer.size());
 
     _vulkanDevice->CopyBuffer(vertexStaging.buffer, _vertices.buffer, vertexBufferSize);
 
@@ -1058,7 +1058,6 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
 
     //index buffer
     VkDeviceSize indexBufferSize = indexBuffer.size() * sizeof(uint32_t);
-    _indices.count = static_cast<uint32_t>(indexBuffer.size());
 
     Initializers::Buffer indexStaging;
     indexStaging = _vulkanDevice->CreateBuffer(
@@ -1076,6 +1075,7 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | memoryPropertyFlags,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
+    _indices.count = static_cast<uint32_t>(indexBuffer.size());
 
     _vulkanDevice->CopyBuffer(indexStaging.buffer, _indices.buffer, indexBufferSize);
 
@@ -2007,10 +2007,11 @@ void AccelerationStructure::Destroy() {
     vkDestroyAccelerationStructureKHR(vulkanDevice->_device, handle, nullptr);
 }
 
-void AppBase::PolygonMesh::Connect(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer) {
+void AppBase::PolygonMesh::Connect(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer, uint32_t stride) {
+    blas = new AccelerationStructure(vulkandevice);
     vertexBuffer = vertBuffer;
     indexBuffer = idxBuffer;
-    blas = new AccelerationStructure(vulkandevice);
+    vertexStride = stride;
 }
 
 void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
@@ -2318,13 +2319,14 @@ void AppBase::PrepareMesh() {
         const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
         s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
 
-        r_meshGlTF.vertexBuffer = s_model->_vertices;
-        r_meshGlTF.indexBuffer = s_model->_indices;
+        r_meshGlTF.Connect(_vulkanDevice, s_model->_vertices, s_model->_indices, 0);
     }
 
     
     //plane
     {
+        Initializers::Buffer planeVertexBuffer;
+        Initializers::Buffer planeIndexBuffer;
         std::vector <PrimitiveMesh::Vertex> vertices;
         std::vector<uint32_t> indices;
         PrimitiveMesh::GetCeiling(vertices, indices);
@@ -2344,12 +2346,14 @@ void AppBase::PrepareMesh() {
         memcpy(data, vertices.data(), vertexSize);
         vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
 
-        r_meshPlane.vertexBuffer = _vulkanDevice->CreateBuffer(
+        planeVertexBuffer = _vulkanDevice->CreateBuffer(
             vertexSize,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        _vulkanDevice->CopyBuffer(vertexStaging.buffer, r_meshPlane.vertexBuffer.buffer, vertexSize);
+        planeVertexBuffer.count = uint32_t(vertices.size());
+
+        _vulkanDevice->CopyBuffer(vertexStaging.buffer, planeVertexBuffer.buffer, vertexSize);
 
         vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
         vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
@@ -2366,17 +2370,19 @@ void AppBase::PrepareMesh() {
         memcpy(data, indices.data(), indexSize);
         vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
 
-        r_meshPlane.indexBuffer = _vulkanDevice->CreateBuffer(
+        planeIndexBuffer = _vulkanDevice->CreateBuffer(
             indexSize,
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
-        _vulkanDevice->CopyBuffer(indexStaging.buffer, r_meshPlane.indexBuffer.buffer, indexSize);
+        planeIndexBuffer.count = uint32_t(indices.size());
+
+        _vulkanDevice->CopyBuffer(indexStaging.buffer, planeIndexBuffer.buffer, indexSize);
 
         vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
         vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
 
-        r_meshPlane.vertexStride = uint32_t(sizeof(PrimitiveMesh::Vertex));
+        r_meshPlane.Connect(_vulkanDevice, planeVertexBuffer, planeIndexBuffer, uint32_t(sizeof(PrimitiveMesh::Vertex)));
     }
 
 }
