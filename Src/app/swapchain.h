@@ -22,12 +22,6 @@ public:
         std::vector<VkPresentModeKHR> presentModes;
     };
 
-    struct SwapchianBuffer {
-        VkImage image;
-        VkImageView imageview;
-    };
-
-
     /**
     * @brief    èâä˙âª
     */
@@ -82,7 +76,7 @@ public:
     VkExtent2D _extent = { 0,0 };
     uint32_t _imageCount = 0;
     uint32_t _minImageCount = 0;
-    std::vector<SwapchianBuffer> _swapchainBuffers;
+    std::vector<vk::Image> _swapchainImages;
     VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
 
 private:

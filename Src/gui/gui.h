@@ -111,7 +111,7 @@ public:
     /**
     * @brief    UIÇÃçXêV
     */
-    void UpdateUI(float frameTimer, Initializers::MouseButtons mouseButtons, glm::vec2 mousePos);
+    void UpdateUI(float frameTimer, vk::MouseButtons mouseButtons, glm::vec2 mousePos);
 
     /**
     * @brief    ï`âÊ
@@ -133,9 +133,9 @@ private:
     Shader* _shader;
     VkQueue _queue;
 
-    Initializers::Buffer _vertexBuffer;
-    Initializers::Buffer _indexBuffer;
-    Initializers::Image _fontImage;
+    vk::Buffer _vertexBuffer;
+    vk::Buffer _indexBuffer;
+    vk::Image _fontImage;
 
     //pipeline
     VkPipelineLayout _pipelineLayout;

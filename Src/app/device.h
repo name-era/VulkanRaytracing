@@ -64,22 +64,12 @@ struct VulkanDevice {
     /**
     * @brief    バッファを作成する
     */
-    Initializers::Buffer CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+    vk::Buffer CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
 
     /**
     * @brief    バッファをコピーする
     */
     void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-
-    /**
-    * @brief    イメージレイアウトの作成を単一コマンドバッファに記録する
-    */
-    void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
-    
-    /**
-    * @brief    イメージレイアウトの作成
-    */
-    void SetImageRayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
 
     /**
     * @brief    コマンドバッファの記録開始

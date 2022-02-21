@@ -25,10 +25,7 @@ namespace glTF {
     uint32_t descriptorBidningFlags = DescriptorBindingFlags::ImageBaseColor;
 
     struct Texture {
-        VkImage image;
-        VkDeviceMemory memory;
-        VkImageView view;
-        VkSampler sampler;
+        vk::Image textureImage;
         VulkanDevice* vulkanDevice;
         uint32_t mipLevel;
         VkQueue queue;
@@ -52,8 +49,6 @@ namespace glTF {
         * @brief    イメージビューを作成する
         */
         void CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
-
-
 
         /**
         * @brief    イメージの読み込み
@@ -158,7 +153,7 @@ namespace glTF {
         std::vector<Primitive*> primitives;
         std::string name;
 
-        Initializers::Buffer uniformBuffer;
+        vk::Buffer uniformBuffer;
         struct UniformBlock {
             glm::mat4 matrix;
             glm::mat4 jointMatrix[64]{};
@@ -305,8 +300,8 @@ namespace glTF {
 
 
         VkMemoryPropertyFlags memoryPropertyFlags;
-        Initializers::Buffer _vertices;
-        Initializers::Buffer _indices;
+        vk::Buffer _vertices;
+        vk::Buffer _indices;
 
     private:
         std::vector<Node*> _nodes;
@@ -398,18 +393,21 @@ void glTF::Texture::PrepareImage(void* buffer, VkDeviceSize bufferSize, VkFormat
 
     mipLevel = 1;
 
-    Initializers::Buffer stagingBuffer;
+    vk::Buffer stagingBuffer;
     stagingBuffer = vulkanDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     void* data;
     vkMapMemory(vulkanDevice->_device, stagingBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
     memcpy(data, buffer, bufferSize);
     vkUnmapMemory(vulkanDevice->_device, stagingBuffer.memory);
+    
+    CreateImage(texWidth, texHeight, mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage.image, textureImage.memory);
 
-    CreateImage(texWidth, texHeight, mipLevel, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
-    vulkanDevice->TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevel);
-    CopyBufferToImage(stagingBuffer.buffer, image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    vulkanDevice->TransitionImageLayout(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevel);
+    auto commandBuffer = vulkanDevice->BeginCommand();  
+    textureImage.TransitionImageLayout(commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevel);
+    CopyBufferToImage(stagingBuffer.buffer, textureImage.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    textureImage.TransitionImageLayout(commandBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevel);
+    vulkanDevice->EndCommandAndWait(commandBuffer, queue);
 
     vkDestroyBuffer(vulkanDevice->_device, stagingBuffer.buffer, nullptr);
     vkFreeMemory(vulkanDevice->_device, stagingBuffer.memory, nullptr);
@@ -427,7 +425,7 @@ void glTF::Texture::CreateImageView(VkImage image, VkFormat format, VkImageAspec
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
-    if (vkCreateImageView(vulkanDevice->_device, &viewInfo, nullptr, &view) != VK_SUCCESS) {
+    if (vkCreateImageView(vulkanDevice->_device, &viewInfo, nullptr, &textureImage.view) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
     }
 }
@@ -458,8 +456,8 @@ void glTF::Texture::LoadglTFImages(tinygltf::Image& gltfImage) {
 
 
     PrepareImage(buffer, bufferSize, IMAGEFORMAT, gltfImage.width, gltfImage.height);
-    CreateImageView(image, IMAGEFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
-    sampler = vulkanDevice->CreateSampler();
+    CreateImageView(textureImage.image, IMAGEFORMAT, VK_IMAGE_ASPECT_COLOR_BIT, mipLevel);
+    textureImage.sampler = vulkanDevice->CreateSampler();
 
     if (deleteBuffer) {
         delete[] buffer;
@@ -473,10 +471,7 @@ void glTF::Texture::Connect(VulkanDevice* device, VkQueue transQueue) {
 }
 
 void glTF::Texture::Destroy() {
-    vkDestroySampler(vulkanDevice->_device, sampler, nullptr);
-    vkDestroyImageView(vulkanDevice->_device, view, nullptr);
-    vkDestroyImage(vulkanDevice->_device, image, nullptr);
-    vkFreeMemory(vulkanDevice->_device, memory, nullptr);
+    textureImage.Destroy(vulkanDevice->_device);
 }
 
 /*******************************************************************************************************************
@@ -500,9 +495,9 @@ void glTF::Material::createDescriptorSet(VulkanDevice* vulkanDevice, VkDescripto
     
     if (descriptorBidningFlags & DescriptorBindingFlags::ImageBaseColor) {
         VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageView = baseColorTexture->view;
-        imageInfo.sampler = baseColorTexture->sampler;
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = baseColorTexture->textureImage.view;
+        imageInfo.sampler = baseColorTexture->textureImage.sampler;
+        imageInfo.imageLayout = baseColorTexture->textureImage.currentLayout;
         
         VkWriteDescriptorSet writeDescriptorSet{};
         writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -517,8 +512,9 @@ void glTF::Material::createDescriptorSet(VulkanDevice* vulkanDevice, VkDescripto
     }
     if (normalTexture && descriptorBidningFlags & DescriptorBindingFlags::ImageNormalMap) {
         VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageView = normalTexture->view;
-        imageInfo.sampler = normalTexture->sampler;
+        imageInfo.imageView = normalTexture->textureImage.view;
+        imageInfo.sampler = normalTexture->textureImage.sampler;
+        imageInfo.imageLayout = normalTexture->textureImage.currentLayout;
 
         VkWriteDescriptorSet writeDescriptorSet{};
         writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1032,7 +1028,7 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
     //vertex buffer
     VkDeviceSize vertexBufferSize = vertexBuffer.size() * sizeof(Vertex);
 
-    Initializers::Buffer vertexStaging;
+    vk::Buffer vertexStaging;
     vertexStaging = _vulkanDevice->CreateBuffer(
         vertexBufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -1059,7 +1055,7 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
     //index buffer
     VkDeviceSize indexBufferSize = indexBuffer.size() * sizeof(uint32_t);
 
-    Initializers::Buffer indexStaging;
+    vk::Buffer indexStaging;
     indexStaging = _vulkanDevice->CreateBuffer(
         indexBufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -1175,14 +1171,12 @@ AppBase::AppBase()
 *                                             コールバック
 ********************************************************************************************************************/
 
-//フレームバッファのサイズ変更時
 static void FramebufferResizeCallback(GLFWwindow* window, int width, int height) {
 
     auto app = reinterpret_cast<AppBase*>(glfwGetWindowUserPointer(window));
     app->_framebufferResized = true;
 }
 
-//マウス入力時の処理
 static void mouseButton(GLFWwindow* window, int button, int action, int modsy) {
 
     AppBase* instance = static_cast<AppBase*>(glfwGetWindowUserPointer(window));
@@ -1222,7 +1216,6 @@ void AppBase::MouseMove(double x, double y) {
     _mousePos = glm::vec2((float)x, (float)y);
 }
 
-//カーソル入力
 static void cursor(GLFWwindow* window, double xpos, double ypos) {
 
     AppBase* const instance(static_cast<AppBase*>(glfwGetWindowUserPointer(window)));
@@ -1232,13 +1225,11 @@ static void cursor(GLFWwindow* window, double xpos, double ypos) {
     }
 }
 
-//マウスホイール操作時の処理
 static void wheel(GLFWwindow* window, double x, double y) {
 
     AppBase* instance = static_cast<AppBase*>(glfwGetWindowUserPointer(window));
 
     if (instance != NULL) {
-        //ワールド座標系に対するデバイス座標系の拡大率を更新する
         instance->_camera->translate(glm::vec3(0.0f, 0.0f, (float)y * 0.05f));
     }
 }
@@ -1708,7 +1699,7 @@ void AppBase::CreateFramebuffers() {
     for (size_t i = 0; i < _swapchain->_imageCount; i++) {
         
         std::array<VkImageView, 2> attachments = {
-            _swapchain->_swapchainBuffers[i].imageview,
+            _swapchain->_swapchainImages[i].view,
             _depthImage.view
         };
 
@@ -1769,48 +1760,24 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
             WIDTH, HEIGHT, 1
         );
 
-        //copy raytracing result to back buffer
-        //set image layout as transfer dst
-        _vulkanDevice->SetImageRayout(
-            _commandBuffers[i],
-            _swapchain->_swapchainBuffers[i].image,
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1
-        );
 
-        //set raytracing result image as transtfer src
-        _vulkanDevice->SetImageRayout(
-            _commandBuffers[i],
-            r_strageImage.image,
-            VK_IMAGE_LAYOUT_GENERAL,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            1
-        );
+        //copy raytracing result to back buffer
+
+        //set layout to transfer layout
+        _swapchain->_swapchainImages[i].TransitionImageLayout(_commandBuffers[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
+        r_strageImage.TransitionImageLayout(_commandBuffers[i], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1);
 
         VkImageCopy copyRegion{};
         copyRegion.extent = { WIDTH,HEIGHT,1 };
         copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
         copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
 
-        vkCmdCopyImage(_commandBuffers[i], r_strageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, _swapchain->_swapchainBuffers[i].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
+        vkCmdCopyImage(_commandBuffers[i], r_strageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, _swapchain->_swapchainImages[i].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+        
         //revert layout to previous layout
-        _vulkanDevice->SetImageRayout(
-            _commandBuffers[i],
-            _swapchain->_swapchainBuffers[i].image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            1
-        );
+        _swapchain->_swapchainImages[i].TransitionImageLayout(_commandBuffers[i], VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
+        r_strageImage.TransitionImageLayout(_commandBuffers[i], VK_IMAGE_LAYOUT_GENERAL, 1);
 
-        _vulkanDevice->SetImageRayout(
-            _commandBuffers[i],
-            r_strageImage.image,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            VK_IMAGE_LAYOUT_GENERAL,
-            1
-        );
 
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1959,7 +1926,7 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
     vkCreateAccelerationStructureKHR(vulkanDevice->_device, &createInfo, nullptr, &handle);
 
     //create scratch buffer
-    Initializers::Buffer scratchBuffer = vulkanDevice->CreateBuffer(
+    vk::Buffer scratchBuffer = vulkanDevice->CreateBuffer(
         buildSizeInfo.buildScratchSize,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
@@ -2014,7 +1981,7 @@ void AccelerationStructure::Destroy() {
     vkDestroyAccelerationStructureKHR(vulkanDevice->_device, handle, nullptr);
 }
 
-AppBase::PolygonMesh::PolygonMesh(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer, uint32_t stride) {
+AppBase::PolygonMesh::PolygonMesh(VulkanDevice* vulkandevice, vk::Buffer& vertBuffer, vk::Buffer& idxBuffer, uint32_t stride) {
     blas = new AccelerationStructure(vulkandevice);
     vertexBuffer = vertBuffer;
     indexBuffer = idxBuffer;
@@ -2048,7 +2015,7 @@ void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
     blas->CreateAccelerationStructureBuffer(VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR, geometryInfo, numTriangles);
 }
 
-AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t height, VkFormat format, VkImageAspectFlags aspectFlags, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
+vk::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t height, VkFormat format, VkImageAspectFlags aspectFlags, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
     //create image
     usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     VkImageCreateInfo imageInfo{};
@@ -2069,7 +2036,7 @@ AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t heigh
         imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
 
-    Image imageResource;
+    vk::Image imageResource;
     vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &imageResource.image);
 
     VkMemoryRequirements memRequirements;
@@ -2106,7 +2073,7 @@ AppBase::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t heigh
     return imageResource;
 }
 
-AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
+vk::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
     std::vector<char> binImage;
     std::ifstream infile(fileNames, std::ios::binary);
     if (!infile) {
@@ -2126,7 +2093,7 @@ AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFl
         4
     );
 
-    Image textureResource = CreateTextureImageAndView(
+    vk::Image textureResource = CreateTextureImageAndView(
         width, height,
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_ASPECT_COLOR_BIT,
@@ -2149,33 +2116,30 @@ AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFl
     memcpy(data, image, imageSize);
     vkUnmapMemory(_vulkanDevice->_device, bufferSrc.memory);
 
-    _vulkanDevice->TransitionImageLayout(textureResource.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
-
     //copy to image
-    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
-    for (uint32_t i = 0; i < 6; i++) {
+    auto commandBuffer = _vulkanDevice->BeginCommand();
+    textureResource.TransitionImageLayout(commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
 
-        VkBufferImageCopy region{};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
-        region.imageOffset = { 0, 0, 0 };
-        region.imageExtent = {
-            uint32_t(width),
-            uint32_t(height),
-            1
-        };
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = { 0, 0, 0 };
+    region.imageExtent = {
+        uint32_t(width),
+        uint32_t(height),
+        1
+    };
 
-        vkCmdCopyBufferToImage(commandBuffer, bufferSrc.buffer, textureResource.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdCopyBufferToImage(commandBuffer, bufferSrc.buffer, textureResource.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-    }
-    _vulkanDevice->EndCommand(commandBuffer, _vulkanDevice->_queue);
-    _vulkanDevice->TransitionImageLayout(textureResource.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
-
+    
+    textureResource.TransitionImageLayout(commandBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
+    _vulkanDevice->EndCommandAndWait(commandBuffer, _vulkanDevice->_queue);
 
     vkDestroyBuffer(_vulkanDevice->_device, bufferSrc.buffer, nullptr);
     vkFreeMemory(_vulkanDevice->_device, bufferSrc.memory, nullptr);
@@ -2184,7 +2148,7 @@ AppBase::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFl
     return textureResource;
 }
 
-AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
+vk::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps) {
 
     int width, height;
     stbi_uc* images[6] = { 0 };
@@ -2229,7 +2193,7 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
         imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
 
-    Image cubeMap;
+    vk::Image cubeMap;
     vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &cubeMap.image);
 
     VkMemoryRequirements memRequirements;
@@ -2264,7 +2228,7 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
     }
 
     //staging buffer
-    Initializers::Buffer buffers[6];
+    vk::Buffer buffers[6];
     auto imageSize = width * height * sizeof(uint32_t);
     for (uint32_t i = 0; i < 6; i++) {
         buffers[i] = _vulkanDevice->CreateBuffer(
@@ -2280,10 +2244,10 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
 
     }
 
-    _vulkanDevice->TransitionImageLayout(cubeMap.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
-
-    //copy to image
-    VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
+    //copy buffer to image
+    auto commandBuffer = _vulkanDevice->BeginCommand();
+    cubeMap.layerCount = 6;
+    cubeMap.TransitionImageLayout(commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
     for (uint32_t i = 0; i < 6; i++) {
 
         VkBufferImageCopy region{};
@@ -2292,7 +2256,7 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
         region.bufferImageHeight = 0;
         region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.baseArrayLayer = i;
         region.imageSubresource.layerCount = 1;
         region.imageOffset = { 0, 0, 0 };
         region.imageExtent = {
@@ -2304,8 +2268,8 @@ AppBase::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUs
         vkCmdCopyBufferToImage(commandBuffer, buffers[i].buffer, cubeMap.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
     }
+    cubeMap.TransitionImageLayout(commandBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
     _vulkanDevice->EndCommand(commandBuffer, _vulkanDevice->_queue);
-    _vulkanDevice->TransitionImageLayout(cubeMap.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
 
     for (auto buffer : buffers) {
         vkDestroyBuffer(_vulkanDevice->_device, buffer.buffer, nullptr);
@@ -2333,8 +2297,8 @@ void AppBase::PrepareMesh() {
     
     //plane
     {
-        Initializers::Buffer planeVertexBuffer;
-        Initializers::Buffer planeIndexBuffer;
+        vk::Buffer planeVertexBuffer;
+        vk::Buffer planeIndexBuffer;
         std::vector <PrimitiveMesh::Vertex> vertices;
         std::vector<uint32_t> indices;
         PrimitiveMesh::GetCeiling(vertices, indices);
@@ -2342,7 +2306,7 @@ void AppBase::PrepareMesh() {
         uint32_t indexSize = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
 
         //vertex
-        Initializers::Buffer vertexStaging;
+        vk::Buffer vertexStaging;
         vertexStaging = _vulkanDevice->CreateBuffer(
             vertexSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -2367,7 +2331,7 @@ void AppBase::PrepareMesh() {
         vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
 
         //index
-        Initializers::Buffer indexStaging;
+        vk::Buffer indexStaging;
         indexStaging = _vulkanDevice->CreateBuffer(
             indexSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -2549,8 +2513,9 @@ void AppBase::CreateStrageImage() {
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
     
-    _vulkanDevice->TransitionImageLayout(r_strageImage.image, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_GENERAL,1);
-
+    auto commandBuffer = _vulkanDevice->BeginCommand();
+    r_strageImage.TransitionImageLayout(commandBuffer, VK_IMAGE_LAYOUT_GENERAL, 1);
+    _vulkanDevice->EndCommand(commandBuffer, _vulkanDevice->_queue);
 }
 
 void AppBase::UpdateUniformBuffer(uint32_t frameIndex) {
@@ -2835,7 +2800,7 @@ void AppBase::CreateDescriptorSets() {
     {
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageView = r_strageImage.view;
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        imageInfo.imageLayout = r_strageImage.currentLayout;
 
         writeDescriptorSetsInfo[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writeDescriptorSetsInfo[1].dstSet = r_descriptorSet;
@@ -2862,7 +2827,7 @@ void AppBase::CreateDescriptorSets() {
         VkDescriptorImageInfo bgImageInfo{};
         bgImageInfo.imageView = r_cubeMap.view;
         bgImageInfo.sampler = r_cubeMap.sampler;
-        bgImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        bgImageInfo.imageLayout = r_cubeMap.currentLayout;
 
         writeDescriptorSetsInfo[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writeDescriptorSetsInfo[3].dstSet = r_descriptorSet;
@@ -2908,7 +2873,7 @@ void AppBase::CreateDescriptorSets() {
         {
             texutureInfo[i].imageView = r_textures[i].view;
             texutureInfo[i].sampler = r_textures[i].sampler;
-            texutureInfo[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            texutureInfo[i].imageLayout = r_textures[i].currentLayout;
         }
         VkWriteDescriptorSet textureWriteDescriptorSetsInfo{};
         textureWriteDescriptorSetsInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

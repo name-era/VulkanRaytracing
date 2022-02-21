@@ -5,15 +5,17 @@
 #define SWAPCHAINCOLORFORMAT VK_FORMAT_B8G8R8A8_UNORM
 #define VERTEXFORMAT VK_FORMAT_R32G32B32_SFLOAT
 
-const uint32_t WIDTH = 1280;
-const uint32_t HEIGHT = 720;
-
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 
 #include <algorithm>
+#include <stdexcept>
+#include <vector>
 
-namespace Initializers {
+const uint32_t WIDTH = 1280;
+const uint32_t HEIGHT = 720;
+
+namespace vk {
 	
 	struct MouseButtons {
 		bool left = false;
@@ -61,8 +63,26 @@ namespace Initializers {
 		VkDeviceMemory memory;
 		VkImageView view;
 		VkSampler sampler;
-	};
+		VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		uint32_t layerCount = 1;
+		void Destroy(VkDevice device) {
+			if (image != NULL) {
+				vkDestroyImage(device, image, nullptr);
+			}
+			if (memory != NULL) {
+				vkDestroyImageView(device, view, nullptr);
+			}
+			if (view != NULL) {
+				vkFreeMemory(device, memory, nullptr);
+			}
+			if (sampler != NULL) {
+				vkDestroySampler(device, sampler, nullptr);
+			}
+		}
 
+		void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImageLayout newLayout, uint32_t mipLevels);
+
+	};
 }
 
 namespace PrimitiveMesh {
@@ -96,5 +116,4 @@ namespace PrimitiveMesh {
 
 		indices = { 0, 1, 2, 2, 1, 3 };
 	}
-
 }

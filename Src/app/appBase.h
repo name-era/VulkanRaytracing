@@ -48,27 +48,15 @@ class AppBase
 {
 
 public:
-    
-    struct Image {
-        VkImage image;
-        VkDeviceMemory memory;
-        VkImageView view;
-        VkSampler sampler;
-        void Destroy(VkDevice device) {
-            vkDestroyImage(device, image, nullptr);
-            vkDestroyImageView(device, view, nullptr);
-            vkFreeMemory(device, memory, nullptr);
-        }
-    };
 
     struct PolygonMesh {
 
-        PolygonMesh(VulkanDevice* vulkandevice, Initializers::Buffer& vertBuffer, Initializers::Buffer& idxBuffer, uint32_t stride);
+        PolygonMesh(VulkanDevice* vulkandevice, vk::Buffer& vertBuffer, vk::Buffer& idxBuffer, uint32_t stride);
         void BuildBLAS(VulkanDevice* vulkanDevice);
         
         AccelerationStructure* blas;
-        Initializers::Buffer vertexBuffer;
-        Initializers::Buffer indexBuffer;
+        vk::Buffer vertexBuffer;
+        vk::Buffer indexBuffer;
         uint32_t vertexStride = 0;
     };
 
@@ -229,11 +217,11 @@ public:
     ********************************************************************************************************************/
 
     //あとでdeviceクラスに移動
-    Image CreateTextureCube(const wchar_t* fileNames[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
+    vk::Image CreateTextureCube(const wchar_t* fileNames[6], VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
-    Image CreateTextureImageAndView(uint32_t width, uint32_t height, VkFormat format, VkImageAspectFlags aspectFlags, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
+    vk::Image CreateTextureImageAndView(uint32_t width, uint32_t height, VkFormat format, VkImageAspectFlags aspectFlags, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
-    Image Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
+    vk::Image Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
     /**
     * @brief    メッシュを構築する
@@ -387,7 +375,7 @@ public:
     uint32_t _mipLevels;
 
     //depth
-    Image _depthImage;
+    vk::Image _depthImage;
 
     VkCommandPool _commandPool;
     std::vector<VkCommandBuffer> _commandBuffers;
@@ -400,18 +388,18 @@ public:
     glm::vec2 _mousePos;
     bool viewUpdated = false;
     float timer = 0.0f;
-    Initializers::MouseButtons _mouseButtons;
+    vk::MouseButtons _mouseButtons;
     bool _framebufferResized;
     
     //UI用
     VkDescriptorPool _descriptorPool;
 
     //レイトレーシング（あとで別クラスにする）
-    Initializers::Buffer r_instanceBuffer;
-    Initializers::DynamicBuffer r_ubo;
-    Initializers::Buffer r_raygenShaderBindingTable;
-    Initializers::Buffer r_missShaderBindingTable;
-    Initializers::Buffer r_hitShaderBindingTable;
+    vk::Buffer r_instanceBuffer;
+    vk::DynamicBuffer r_ubo;
+    vk::Buffer r_raygenShaderBindingTable;
+    vk::Buffer r_missShaderBindingTable;
+    vk::Buffer r_hitShaderBindingTable;
 
 
     PolygonMesh* r_meshGlTF;
@@ -419,15 +407,15 @@ public:
     SceneObject r_gltfModel;
     SceneObject r_ceiling;
     std::vector<SceneObject> r_sceneObjects;
-    Initializers::Buffer r_materialStorageBuffer;
-    Initializers::Buffer r_objectStorageBuffer;
-    std::vector<Image> r_textures;
-    Image r_cubeMap;
+    vk::Buffer r_materialStorageBuffer;
+    vk::Buffer r_objectStorageBuffer;
+    std::vector<vk::Image> r_textures;
+    vk::Image r_cubeMap;
 
     //TLAS
     AccelerationStructure* r_topLevelAS;
     
-    Image r_strageImage;
+    vk::Image r_strageImage;
 
     VkDescriptorSetLayout r_descriptorSetLayout;
     VkDescriptorPool r_descriptorPool;

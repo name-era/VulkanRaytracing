@@ -118,7 +118,7 @@ void Gui::PrepareImage() {
     io.Fonts->GetTexDataAsRGBA32(&fontData, &texWidth, &texHeight);
     VkDeviceSize uploadSize = texWidth * texHeight * 4 * sizeof(char);
 
-    Initializers::Buffer stagingBuffer = _vulkanDevice->CreateBuffer(
+    vk::Buffer stagingBuffer = _vulkanDevice->CreateBuffer(
         uploadSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -500,7 +500,7 @@ void Gui::DrawUI(VkCommandBuffer commandBuffer) {
     }
 }
 
-void Gui::UpdateUI(float frameTimer, Initializers::MouseButtons mouseButtons, glm::vec2 mousePos) {
+void Gui::UpdateUI(float frameTimer, vk::MouseButtons mouseButtons, glm::vec2 mousePos) {
 
     ImGuiIO& io = ImGui::GetIO();
     io.DisplaySize = ImVec2((float)WIDTH, (float)HEIGHT);

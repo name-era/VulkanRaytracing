@@ -127,9 +127,9 @@ void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
     swapchainImages.resize(_imageCount);
     vkGetSwapchainImagesKHR(_device, _swapchain, &_imageCount, swapchainImages.data());
 
-    _swapchainBuffers.resize(_imageCount);
+    _swapchainImages.resize(_imageCount);
     for (uint32_t i = 0; i < _imageCount; i++) {
-        _swapchainBuffers[i].image = swapchainImages[i];
+        _swapchainImages[i].image = swapchainImages[i];
     }
 
 
@@ -137,7 +137,7 @@ void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
     for (uint32_t i = 0; i < _imageCount; i++) {
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = _swapchainBuffers[i].image;
+        viewInfo.image = _swapchainImages[i].image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -146,7 +146,7 @@ void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(_device, &viewInfo, nullptr, &_swapchainBuffers[i].imageview) != VK_SUCCESS) {
+        if (vkCreateImageView(_device, &viewInfo, nullptr, &_swapchainImages[i].view) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture image view!");
         }
     }
@@ -155,9 +155,9 @@ void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
 void Swapchain::Cleanup() {
     if (_swapchain != VK_NULL_HANDLE) {
         for (uint32_t i = 0; i < _imageCount; i++) {
-            vkDestroyImageView(_device, _swapchainBuffers[i].imageview, nullptr);
+            vkDestroyImageView(_device, _swapchainImages[i].view, nullptr);
         }
-        _swapchainBuffers.resize(0);
+        _swapchainImages.resize(0);
     }
 
     if (_swapchain != VK_NULL_HANDLE) {
