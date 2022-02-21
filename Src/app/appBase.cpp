@@ -1744,6 +1744,9 @@ void AppBase::CreateCommandBuffers() {
 void AppBase::BuildCommandBuffers(bool renderImgui) {
 
     for (size_t i = 0; i < _commandBuffers.size(); i++) {
+
+        UpdateUniformBuffer(i);
+
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -1753,7 +1756,12 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
 
         //execute raytrace
         vkCmdBindPipeline(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
-        vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, 0, nullptr);
+
+        uint32_t offsets[] = {
+            uint32_t(r_ubo.blockSize * i)
+        };
+
+        vkCmdBindDescriptorSets(_commandBuffers[i], VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, _countof(offsets), offsets);
         VkStridedDeviceAddressRegionKHR callableSbtEntry{};
         vkCmdTraceRaysKHR(
             _commandBuffers[i],
@@ -2482,8 +2490,8 @@ void AppBase::CreateSceneBuffers() {
 
         r_objectStorageBuffer = _vulkanDevice->CreateBuffer(
             objectStorageBufferSize,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
     }
 }
@@ -2545,28 +2553,38 @@ void AppBase::CreateStrageImage() {
 
 }
 
-void AppBase::UpdateUniformBuffer() {
+void AppBase::UpdateUniformBuffer(uint32_t frameIndex) {
     _uniformData.projInverse = glm::inverse(_camera->matrix.perspective);
     _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
     _uniformData.lightDirection = glm::vec4(-0.2f, -1.0f, -1.0f, 0.0f);
     _uniformData.lightColor = glm::vec4(1.0f);
     _uniformData.ambientColor = glm::vec4(0.25f);
     _uniformData.cameraPosition = _camera->position;
-    memcpy(r_ubo.mapped, &_uniformData, sizeof(UniformBlock));
+    memcpy(static_cast<uint8_t*>(r_ubo.dynamicBuffer.mapped) + r_ubo.blockSize * frameIndex, &_uniformData, sizeof(UniformBlock));
 }
 
-void AppBase::CreateUniformBuffer() {
-    VkDeviceSize bufferSize = sizeof(UniformBlock);
-    r_ubo = _vulkanDevice->CreateBuffer(
+void AppBase::CreateDynamicUniformBuffer(size_t size, VkBufferUsageFlags usage) {
+    
+    auto bufferAlignment = _vulkanDevice->minUniformBufferOffsetAlignment;
+
+    if (usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
+
+    }
+    if (usage & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) {
+
+    }
+
+    r_ubo.blockSize = (size + bufferAlignment - 1) & ~(bufferAlignment - 1);
+    VkDeviceSize bufferSize = sizeof(UniformBlock) * r_ubo.blockSize * _swapchain->_imageCount;
+
+    r_ubo.dynamicBuffer = _vulkanDevice->CreateBuffer(
         bufferSize,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
-    vkMapMemory(_vulkanDevice->_device, r_ubo.memory, 0, VK_WHOLE_SIZE, 0, &r_ubo.mapped);
-    memcpy(r_ubo.mapped, &r_ubo, sizeof(UniformBlock));
-
-    UpdateUniformBuffer();
+    vkMapMemory(_vulkanDevice->_device, r_ubo.dynamicBuffer.memory, 0, VK_WHOLE_SIZE, 0, &r_ubo.dynamicBuffer.mapped);
+    memcpy(r_ubo.dynamicBuffer.mapped, &_uniformData, bufferSize);
 }
 
 void AppBase::CreateRaytracingLayout() {
@@ -2615,7 +2633,7 @@ void AppBase::CreateRaytracingLayout() {
     VkDescriptorSetLayoutBinding textureBinding{};
     textureBinding.binding = 6;
     textureBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    textureBinding.descriptorCount = 1;
+    textureBinding.descriptorCount = uint32_t(r_textures.size());
     textureBinding.stageFlags = VK_SHADER_STAGE_ALL;
 
     std::vector<VkDescriptorSetLayoutBinding> bindings({
@@ -2829,15 +2847,14 @@ void AppBase::CreateDescriptorSets() {
     
     {
         VkDescriptorBufferInfo sceneInfo{};
-        sceneInfo.buffer = r_ubo.buffer;
-        sceneInfo.offset = 0;
-        sceneInfo.range = VK_WHOLE_SIZE;
+        sceneInfo.buffer = r_ubo.dynamicBuffer.buffer;
+        sceneInfo.range = r_ubo.blockSize;
 
         writeDescriptorSetsInfo[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writeDescriptorSetsInfo[2].dstSet = r_descriptorSet;
         writeDescriptorSetsInfo[2].dstBinding = 2;
         writeDescriptorSetsInfo[2].descriptorCount = 1;
-        writeDescriptorSetsInfo[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writeDescriptorSetsInfo[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         writeDescriptorSetsInfo[2].pBufferInfo = &sceneInfo;
     }
 
@@ -2851,7 +2868,7 @@ void AppBase::CreateDescriptorSets() {
         writeDescriptorSetsInfo[3].dstSet = r_descriptorSet;
         writeDescriptorSetsInfo[3].dstBinding = 3;
         writeDescriptorSetsInfo[3].descriptorCount = 1;
-        writeDescriptorSetsInfo[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writeDescriptorSetsInfo[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         writeDescriptorSetsInfo[3].pImageInfo = &bgImageInfo;
     }
 
@@ -2915,7 +2932,7 @@ void AppBase::InitRayTracing() {
 
     CreateTLAS();
     CreateStrageImage();
-    CreateUniformBuffer();
+    CreateDynamicUniformBuffer(sizeof(UniformBlock), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     CreateRaytracingLayout();
     _shader = new Shader();
     _shader->Connect(_vulkanDevice);
@@ -3119,7 +3136,7 @@ void AppBase::Run() {
         auto tEnd = std::chrono::high_resolution_clock::now();
         auto elapsedTime = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
         timer = (float)elapsedTime / 1000.0f;
-        UpdateUniformBuffer();
+
 
         BuildCommandBuffers(true);
     }
@@ -3156,7 +3173,7 @@ void AppBase::Destroy() {
     //raytracing
     s_model->Destroy();
     r_instanceBuffer.Destroy(_vulkanDevice->_device);
-    r_ubo.Destroy(_vulkanDevice->_device);
+    r_ubo.dynamicBuffer.Destroy(_vulkanDevice->_device);
     r_raygenShaderBindingTable.Destroy(_vulkanDevice->_device);
     r_missShaderBindingTable.Destroy(_vulkanDevice->_device);
     r_hitShaderBindingTable.Destroy(_vulkanDevice->_device);

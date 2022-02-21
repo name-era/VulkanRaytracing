@@ -273,12 +273,12 @@ public:
     /**
     * @brief    ユニフォームバッファを更新する
     */
-    void UpdateUniformBuffer();
+    void UpdateUniformBuffer(uint32_t frameIndex);
     
     /**
-    * @brief    ユニフォームバッファを作成する
+    * @brief    動的ユニフォームバッファを作成する（あとでストレージバッファにも対応）
     */
-    void CreateUniformBuffer();
+    void CreateDynamicUniformBuffer(size_t size, VkBufferUsageFlags usage);
 
     /**
     * @brief    レイトレーシング用ディスクリプタセットレイアウト、パイプラインレイアウトを作成する
@@ -408,7 +408,7 @@ public:
 
     //レイトレーシング（あとで別クラスにする）
     Initializers::Buffer r_instanceBuffer;
-    Initializers::Buffer r_ubo;
+    Initializers::DynamicBuffer r_ubo;
     Initializers::Buffer r_raygenShaderBindingTable;
     Initializers::Buffer r_missShaderBindingTable;
     Initializers::Buffer r_hitShaderBindingTable;

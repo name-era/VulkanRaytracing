@@ -133,4 +133,6 @@ struct VulkanDevice {
     float _cameraPosY = 2.0f;
     float _cameraPsZ = 2.0f;
     float _color[4];
+    VkDeviceSize minUniformBufferOffsetAlignment = 0;
+    VkDeviceSize minStorageBufferOffsetAlignment = 0;
 };

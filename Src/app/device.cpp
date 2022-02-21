@@ -454,6 +454,9 @@ VkSampler VulkanDevice::CreateSampler() {
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(_physicalDevice, &properties);
 
+    minUniformBufferOffsetAlignment = properties.limits.minUniformBufferOffsetAlignment;
+    minStorageBufferOffsetAlignment = properties.limits.minStorageBufferOffsetAlignment;
+
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;

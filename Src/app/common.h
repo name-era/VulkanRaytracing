@@ -50,6 +50,11 @@ namespace Initializers {
 		}
 
 	};
+
+	struct DynamicBuffer {
+		Buffer dynamicBuffer;
+		uint64_t blockSize;
+	};
 	
 	struct Image {
 		VkImage image;
