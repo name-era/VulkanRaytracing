@@ -42,7 +42,7 @@ Swapchain::SwapChainSupportDetails Swapchain::QuerySwapChainSupport(VkPhysicalDe
 
 VkSurfaceFormatKHR Swapchain::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
     for (const auto& availableFormat : availableFormats) {
-        if (availableFormat.format == SWAPCHAINCOLORFORMAT && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+        if (availableFormat.format == SWAPCHAIN_COLOR_FORMAT && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return availableFormat;
         }
     }

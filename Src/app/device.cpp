@@ -237,14 +237,13 @@ VkCommandBuffer VulkanDevice::BeginCommand() {
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
     return commandBuffer;
 }
 
 void VulkanDevice::EndCommand(VkCommandBuffer& commandBuffer, VkQueue& queue) {
+    
     vkEndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo{};
@@ -253,22 +252,23 @@ void VulkanDevice::EndCommand(VkCommandBuffer& commandBuffer, VkQueue& queue) {
     submitInfo.pCommandBuffers = &commandBuffer;
 
     vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
+    if (vkQueueWaitIdle(queue) != VK_SUCCESS) {
+
+    }
+    
 
     vkFreeCommandBuffers(_device, _commandPool, 1, &commandBuffer);
 }
 
-void VulkanDevice::EndCommandAndWait(VkCommandBuffer& commandBuffer, VkQueue& queue) {
+void VulkanDevice::FlushCommandBuffer(VkCommandBuffer& commandBuffer, VkQueue& queue, VkFenceCreateFlags flags) {
 
     vkEndCommandBuffer(commandBuffer);
 
     VkFenceCreateInfo fenceCI{};
     fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceCI.pNext = nullptr;
-    fenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    fenceCI.flags = flags;
     VkFence fence;
     vkCreateFence(_device, &fenceCI, nullptr, &fence);
-    vkResetFences(_device, 1, &fence);
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -276,10 +276,8 @@ void VulkanDevice::EndCommandAndWait(VkCommandBuffer& commandBuffer, VkQueue& qu
     submitInfo.pCommandBuffers = &commandBuffer;
     vkQueueSubmit(_queue, 1, &submitInfo, fence);
     
-    vkWaitForFences(_device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkWaitForFences(_device, 1, &fence, VK_TRUE, DEFAULT_FENCE_TIMEOUT);
     vkDestroyFence(_device, fence, nullptr);
-    vkQueueWaitIdle(_queue);
-
     vkFreeCommandBuffers(_device, _commandPool, 1, &commandBuffer);
 }
 

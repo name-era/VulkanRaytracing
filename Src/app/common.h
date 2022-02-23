@@ -1,9 +1,10 @@
 #pragma once
 
-#define IMAGEFORMAT VK_FORMAT_R8G8B8A8_SRGB
-#define FONTFORMAT VK_FORMAT_R8G8B8A8_UNORM
-#define SWAPCHAINCOLORFORMAT VK_FORMAT_B8G8R8A8_UNORM
-#define VERTEXFORMAT VK_FORMAT_R32G32B32_SFLOAT
+#define IMAGE_FORMAT VK_FORMAT_R8G8B8A8_SRGB
+#define FONT_FORMAT VK_FORMAT_R8G8B8A8_UNORM
+#define SWAPCHAIN_COLOR_FORMAT VK_FORMAT_B8G8R8A8_UNORM
+#define VERTEX_FORMAT VK_FORMAT_R32G32B32_SFLOAT
+#define DEFAULT_FENCE_TIMEOUT 100000000000
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
@@ -79,8 +80,8 @@ namespace vk {
 				vkDestroySampler(device, sampler, nullptr);
 			}
 		}
-
-		void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImageLayout newLayout, uint32_t mipLevels);
+		
+		void SetImageLayout(VkCommandBuffer commandBuffer, VkImageLayout newLayout, uint32_t mipLevels);
 
 	};
 }

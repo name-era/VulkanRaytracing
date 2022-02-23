@@ -84,7 +84,7 @@ struct VulkanDevice {
     /**
     * @brief    コマンドバッファの記録終了＆待機（フレームと関連付かないコマンドバッファ）
     */
-    void EndCommandAndWait(VkCommandBuffer& commandBuffer, VkQueue& queue);
+    void FlushCommandBuffer(VkCommandBuffer& commandBuffer, VkQueue& queue, VkFenceCreateFlags flags = 0);
 
     /**
     * @brief    サポートしているフォーマットを見つける

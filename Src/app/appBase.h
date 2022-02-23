@@ -261,7 +261,7 @@ public:
     /**
     * @brief    ユニフォームバッファを更新する
     */
-    void UpdateUniformBuffer(uint32_t frameIndex);
+    void UpdateUniformBuffer();
     
     /**
     * @brief    動的ユニフォームバッファを作成する（あとでストレージバッファにも対応）
@@ -378,12 +378,14 @@ public:
     vk::Image _depthImage;
 
     VkCommandPool _commandPool;
-    std::vector<VkCommandBuffer> _commandBuffers;
+    struct FrameCommandBuffer {
+        VkCommandBuffer commandBuffer;
+        VkFence fence;
+    };
+    std::vector<FrameCommandBuffer> _commandBuffers;
+
     VkSemaphore _presentCompleteSemaphore;
     VkSemaphore _renderCompleteSemaphore;
-    //Fence to wait for all command buffers to finish
-    VkFence _renderFences;
-
 
     glm::vec2 _mousePos;
     bool viewUpdated = false;
@@ -428,5 +430,7 @@ public:
     VkStridedDeviceAddressRegionKHR raygenRegion;
     VkStridedDeviceAddressRegionKHR missRegion;
     VkStridedDeviceAddressRegionKHR hitRegion;
+
+    uint32_t _frameIndex = 0;
 
 };
