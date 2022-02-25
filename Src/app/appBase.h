@@ -105,6 +105,7 @@ public:
         hitShaderIndex = 2
     };
 
+
     /**
     * @brief    コンストラクタ
     */
@@ -198,7 +199,7 @@ public:
     /**
     * @brief    コマンドバッファを更新する
     */
-    void BuildCommandBuffers(bool renderImgui);
+    void BuildCommandBuffers(uint32_t index, bool renderImgui);
 
     /**
     * @brief    同期オブジェクトを作成する
@@ -328,6 +329,7 @@ public:
     */
     void Run();
 
+
     /*******************************************************************************************************************
     *                                             終了時
     ********************************************************************************************************************/
@@ -431,5 +433,6 @@ public:
     VkStridedDeviceAddressRegionKHR hitRegion;
 
     uint32_t _frameIndex = 0;
+
 
 };

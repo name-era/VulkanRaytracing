@@ -1733,76 +1733,79 @@ void AppBase::CreateCommandBuffers() {
 
         vkAllocateCommandBuffers(_vulkanDevice->_device, &allocInfo, &_commandBuffers[i].commandBuffer);
         vkCreateFence(_vulkanDevice->_device, &fenceInfo, nullptr, &_commandBuffers[i].fence);
+
+        BuildCommandBuffers(i, false);
     }
 }
 
-void AppBase::BuildCommandBuffers(bool renderImgui) {
+void AppBase::BuildCommandBuffers(uint32_t index, bool renderImgui) {
 
-    for (uint32_t index = 0 ; index < _commandBuffers.size(); index++) {
+    auto commandBuffer = _commandBuffers[index].commandBuffer;
 
-        auto commandBuffer = _commandBuffers[index].commandBuffer;
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        throw std::runtime_error("failed to begin recording command buffer!");
+    }
 
-        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording command buffer!");
-        }
-
-        //execute raytrace
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
-
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, 0, nullptr);
-        VkStridedDeviceAddressRegionKHR callableSbtEntry{};
-        vkCmdTraceRaysKHR(
-            commandBuffer,
-            &raygenRegion, &missRegion, &hitRegion, &callableSbtEntry,
-            WIDTH, HEIGHT, 1
-        );
-
-        //copy raytracing result to back buffer
-        //set layout to transfer layout
-        _swapchain->_swapchainImages[index].SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
-        r_strageImage.SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1);
-
-        VkImageCopy copyRegion{};
-        copyRegion.extent = { WIDTH,HEIGHT,1 };
-        copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
-        copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
-
-        vkCmdCopyImage(commandBuffer, r_strageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, _swapchain->_swapchainImages[index].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-        //revert layout to previous layout
-        _swapchain->_swapchainImages[index].SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
-        r_strageImage.SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_GENERAL, 1);
+    vkCmdSetCheckpointNV(commandBuffer, "Raytrace");
 
 
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = _renderPass;
-        renderPassInfo.framebuffer = _frameBuffers[index];
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = _swapchain->_extent;
+    //execute raytrace
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
 
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.0f, 0.f, 0.2f, 1.0f} };
-        clearValues[1].depthStencil = { 1.0f, 0 };
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, 0, nullptr);
+    VkStridedDeviceAddressRegionKHR callableSbtEntry{};
+    vkCmdTraceRaysKHR(
+        commandBuffer,
+        &raygenRegion, &missRegion, &hitRegion, &callableSbtEntry,
+        WIDTH, HEIGHT, 1
+    );
 
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+    //copy raytracing result to back buffer
+    //set layout to transfer layout
+    _swapchain->_swapchainImages[index].SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
+    r_strageImage.SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1);
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    VkImageCopy copyRegion{};
+    copyRegion.extent = { WIDTH,HEIGHT,1 };
+    copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
+    copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
 
-        if (renderImgui) {
-            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
-        }
+    vkCmdCopyImage(commandBuffer, r_strageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, _swapchain->_swapchainImages[index].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-        vkCmdEndRenderPass(commandBuffer);
+    //revert layout to previous layout
+    _swapchain->_swapchainImages[index].SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
+    r_strageImage.SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_GENERAL, 1);
 
-        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to record command buffer!");
-        }
-    }   
+
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = _renderPass;
+    renderPassInfo.framebuffer = _frameBuffers[index];
+    renderPassInfo.renderArea.offset = { 0, 0 };
+    renderPassInfo.renderArea.extent = _swapchain->_extent;
+
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color = { {0.0f, 0.f, 0.2f, 1.0f} };
+    clearValues[1].depthStencil = { 1.0f, 0 };
+
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    if (renderImgui) {
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+    }
+
+    vkCmdEndRenderPass(commandBuffer);
+
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to record command buffer!");
+    }
+    
 }
 
 void AppBase::CreateSyncObjects() {
@@ -1840,14 +1843,22 @@ void AppBase::Initialize() {
         vkGetDeviceProcAddr
     );
 
+    _vulkanDevice->CreateCommandPool();
+
+
+    //swapchain
     _swapchain = new Swapchain();
     _swapchain->Connect(_window, _instance, _physicalDevice, _vulkanDevice->_device);
     _swapchain->CreateSurface();
     _swapchain->CreateSwapChain(_vulkanDevice->FindQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT));
+    auto commandBuffer = _vulkanDevice->BeginCommand();
+    for (auto swapchainImage: _swapchain->_swapchainImages) {
+        swapchainImage.SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
+    }
+    _vulkanDevice->FlushCommandBuffer(commandBuffer, _vulkanDevice->_queue);
 
-    CreateRenderPass();
-    _vulkanDevice->CreateCommandPool();
-    
+  
+    //camera
     _camera = new Camera();
     _camera->type = Camera::CameraType::firstperson;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
@@ -1857,12 +1868,12 @@ void AppBase::Initialize() {
 
 
     InitRayTracing();
-
+    CreateRenderPass();
     InitializeGUI();
     CreateDepthResources();
     CreateFramebuffers();
     CreateCommandBuffers();
-    BuildCommandBuffers(false);
+
     CreateSyncObjects();
 }
 
@@ -2931,6 +2942,8 @@ void AppBase::drawFrame() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
+    BuildCommandBuffers(_frameIndex, true);
+
     VkCommandBuffer submitCommandBuffer = _commandBuffers[_frameIndex].commandBuffer;
 
     VkSubmitInfo submitInfo{};
@@ -2947,11 +2960,14 @@ void AppBase::drawFrame() {
 
     auto fence = _commandBuffers[_frameIndex].fence;
     vkResetFences(_vulkanDevice->_device, 1, &fence);
-    if (vkQueueSubmit(_vulkanDevice->_queue, 1, &submitInfo, fence) != VK_SUCCESS) {
+
+    result = vkQueueSubmit(_vulkanDevice->_queue, 1, &submitInfo, fence);
+    if ( result != VK_SUCCESS) {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
 
     result = _swapchain->QueuePresent(_vulkanDevice->_queue, _frameIndex, _renderCompleteSemaphore);
+    vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
 void AppBase::ShowMenuFile() {
@@ -3057,14 +3073,11 @@ void AppBase::Run() {
 
         glfwPollEvents();
         UpdateUniformBuffer();
-        drawFrame();
-
         UpdateGUI();
-
+        drawFrame();
         auto tEnd = std::chrono::high_resolution_clock::now();
         auto elapsedTime = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
         timer = (float)elapsedTime / 1000.0f;
-        BuildCommandBuffers(true);
     }
     vkDeviceWaitIdle(_vulkanDevice->_device);
 }

@@ -150,6 +150,7 @@ void Swapchain::CreateSwapChain(uint32_t queueFamilyIndex) {
             throw std::runtime_error("failed to create texture image view!");
         }
     }
+
 }
 
 void Swapchain::Cleanup() {
