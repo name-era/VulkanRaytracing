@@ -197,7 +197,7 @@ vk::Buffer VulkanDevice::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usag
         throw std::runtime_error("failed to create buffer!");
     }
 
-    VkMemoryRequirements memRequirements;
+    VkMemoryRequirements memRequirements{};
     vkGetBufferMemoryRequirements(_device, ret.buffer, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo{};
@@ -242,23 +242,6 @@ VkCommandBuffer VulkanDevice::BeginCommand() {
     return commandBuffer;
 }
 
-void VulkanDevice::EndCommand(VkCommandBuffer& commandBuffer, VkQueue& queue) {
-    
-    vkEndCommandBuffer(commandBuffer);
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    if (vkQueueWaitIdle(queue) != VK_SUCCESS) {
-
-    }
-    
-
-    vkFreeCommandBuffers(_device, _commandPool, 1, &commandBuffer);
-}
 
 void VulkanDevice::FlushCommandBuffer(VkCommandBuffer& commandBuffer, VkQueue& queue, VkFenceCreateFlags flags) {
 
@@ -274,10 +257,15 @@ void VulkanDevice::FlushCommandBuffer(VkCommandBuffer& commandBuffer, VkQueue& q
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
-    vkQueueSubmit(_queue, 1, &submitInfo, fence);
-    
+    VkResult result;
+    result = vkQueueSubmit(_queue, 1, &submitInfo, fence);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error("failed to subbmit command!");
+    }
+
     vkWaitForFences(_device, 1, &fence, VK_TRUE, DEFAULT_FENCE_TIMEOUT);
     vkDestroyFence(_device, fence, nullptr);
+    vkQueueWaitIdle(queue);
     vkFreeCommandBuffers(_device, _commandPool, 1, &commandBuffer);
 }
 
@@ -289,7 +277,7 @@ void VulkanDevice::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSi
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
     //“]‘—‚ðŠ®—¹‚·‚é
-    EndCommand(commandBuffer, _queue);
+    FlushCommandBuffer(commandBuffer, _queue);
 }
 
 VkFormat VulkanDevice::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {

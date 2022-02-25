@@ -80,7 +80,7 @@ void Gui::TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageL
         1, &barrier
     );
 
-    _vulkanDevice->EndCommand(commandBuffer, _queue);
+    _vulkanDevice->FlushCommandBuffer(commandBuffer, _queue);
 }
 
 void Gui::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
@@ -103,7 +103,7 @@ void Gui::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 
-    _vulkanDevice->EndCommand(commandBuffer, _queue);
+    _vulkanDevice->FlushCommandBuffer(commandBuffer, _queue);
 }
 
 void Gui::PrepareImage() {

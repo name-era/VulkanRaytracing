@@ -77,11 +77,6 @@ struct VulkanDevice {
     VkCommandBuffer BeginCommand();
 
     /**
-    * @brief    コマンドバッファの記録終了
-    */
-    void EndCommand(VkCommandBuffer& commandBuffer, VkQueue& queue);
-
-    /**
     * @brief    コマンドバッファの記録終了＆待機（フレームと関連付かないコマンドバッファ）
     */
     void FlushCommandBuffer(VkCommandBuffer& commandBuffer, VkQueue& queue, VkFenceCreateFlags flags = 0);

@@ -37,8 +37,7 @@ public:
     
     VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
     uint64_t deviceAddress = 0;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkBuffer buffer = VK_NULL_HANDLE;
+    vk::Buffer asBuffer;
 
 private:
     VulkanDevice* vulkanDevice = VK_NULL_HANDLE;
@@ -80,7 +79,7 @@ public:
         glm::mat4 transform = glm::mat4(1.0f);
         Material material;
 
-        uint32_t offset = 0;
+        uint32_t shaderOffset = 0;
         uint32_t index = 0;
     };
 
@@ -266,7 +265,7 @@ public:
     /**
     * @brief    動的ユニフォームバッファを作成する（あとでストレージバッファにも対応）
     */
-    void CreateDynamicUniformBuffer(size_t size, VkBufferUsageFlags usage);
+    void CreateUniformBuffer();
 
     /**
     * @brief    レイトレーシング用ディスクリプタセットレイアウト、パイプラインレイアウトを作成する
@@ -398,7 +397,7 @@ public:
 
     //レイトレーシング（あとで別クラスにする）
     vk::Buffer r_instanceBuffer;
-    vk::DynamicBuffer r_ubo;
+    vk::Buffer r_uniformBuffer;
     vk::Buffer r_raygenShaderBindingTable;
     vk::Buffer r_missShaderBindingTable;
     vk::Buffer r_hitShaderBindingTable;

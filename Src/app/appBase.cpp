@@ -1658,7 +1658,8 @@ void AppBase::InitializeGUI() {
     //upload GUI font texture
     VkCommandBuffer commandBuffer = _vulkanDevice->BeginCommand();
     ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
-    _vulkanDevice->EndCommand(commandBuffer, _vulkanDevice->_queue);
+    
+    _vulkanDevice->FlushCommandBuffer(commandBuffer, _vulkanDevice->_queue);
     ImGui_ImplVulkan_DestroyFontUploadObjects();
 }
 
@@ -1751,18 +1752,13 @@ void AppBase::BuildCommandBuffers(bool renderImgui) {
         //execute raytrace
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
 
-        uint32_t offsets[] = {
-            uint32_t(r_ubo.blockSize * index)
-        };
-
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, _countof(offsets), offsets);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipelineLayout, 0, 1, &r_descriptorSet, 0, nullptr);
         VkStridedDeviceAddressRegionKHR callableSbtEntry{};
         vkCmdTraceRaysKHR(
             commandBuffer,
             &raygenRegion, &missRegion, &hitRegion, &callableSbtEntry,
             WIDTH, HEIGHT, 1
         );
-
 
         //copy raytracing result to back buffer
         //set layout to transfer layout
@@ -1898,33 +1894,24 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
         &buildSizeInfo
     );
 
-    VkBufferCreateInfo bufferCreateInfo{};
-    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.size = buildSizeInfo.accelerationStructureSize;
-    bufferCreateInfo.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    vkCreateBuffer(vulkanDevice->_device, &bufferCreateInfo, nullptr, &buffer);
-
-    VkMemoryRequirements memoryRequirements{};
-    vkGetBufferMemoryRequirements(vulkanDevice->_device, buffer, &memoryRequirements);
-
-    VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo{};
-    memoryAllocateFlagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-    memoryAllocateFlagsInfo.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
-
-    VkMemoryAllocateInfo memoryAllocateInfo{};
-    memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    memoryAllocateInfo.pNext = &memoryAllocateFlagsInfo;
-    memoryAllocateInfo.allocationSize = memoryRequirements.size;
-
-    vkAllocateMemory(vulkanDevice->_device, &memoryAllocateInfo, nullptr, &memory);
-    vkBindBufferMemory(vulkanDevice->_device, buffer, memory, 0);
+    //create acceleration structure
+    asBuffer = vulkanDevice->CreateBuffer(
+        buildSizeInfo.accelerationStructureSize,
+        VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
 
     VkAccelerationStructureCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-    createInfo.buffer = buffer;
+    createInfo.buffer = asBuffer.buffer;
     createInfo.size = buildSizeInfo.accelerationStructureSize;
     createInfo.type = type;
     vkCreateAccelerationStructureKHR(vulkanDevice->_device, &createInfo, nullptr, &handle);
+
+    VkAccelerationStructureDeviceAddressInfoKHR deviceAddressInfo{};
+    deviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+    deviceAddressInfo.accelerationStructure = handle;
+    deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(vulkanDevice->_device, &deviceAddressInfo);
 
     //create scratch buffer
     vk::Buffer scratchBuffer = vulkanDevice->CreateBuffer(
@@ -1933,10 +1920,9 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
-    //VkAccelerationStructureBuildGeometryInfoKHR other parameter
     buildGeometryInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
     buildGeometryInfo.dstAccelerationStructure = handle;
-    buildGeometryInfo.scratchData.deviceAddress = scratchBuffer.GetBufferDeviceAddress(vulkanDevice->_device);
+    buildGeometryInfo.scratchData.deviceAddress = scratchBuffer.address;
 
     VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo{};
     buildRangeInfo.primitiveCount = primitiveCount;
@@ -1950,12 +1936,8 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
     vkCmdBuildAccelerationStructuresKHR(commandBuffer, 1, &buildGeometryInfo, buildRangeInfos.data());
 
     //memory barrier
-    VkBufferMemoryBarrier memoryBarrier{};
-    memoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    memoryBarrier.buffer = buffer;
-    memoryBarrier.size = VK_WHOLE_SIZE;
-    memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    memoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    VkMemoryBarrier memoryBarrier{};
+    memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
     memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
     memoryBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
     
@@ -1963,23 +1945,17 @@ void AccelerationStructure::CreateAccelerationStructureBuffer(VkAccelerationStru
         commandBuffer,
         VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
         VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-        0, 0, nullptr, 1, &memoryBarrier, 0, nullptr
+        0, 1, &memoryBarrier, 0, nullptr, 0, nullptr
     );
-
     vulkanDevice->FlushCommandBuffer(commandBuffer, vulkanDevice->_queue);
-
-    VkAccelerationStructureDeviceAddressInfoKHR deviceAddressInfo{};
-    deviceAddressInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
-    deviceAddressInfo.accelerationStructure = handle;
-    deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(vulkanDevice->_device, &deviceAddressInfo);
 
     vkDestroyBuffer(vulkanDevice->_device, scratchBuffer.buffer, nullptr);
     vkFreeMemory(vulkanDevice->_device, scratchBuffer.memory, nullptr);
 }
 
 void AccelerationStructure::Destroy() {
-    vkDestroyBuffer(vulkanDevice->_device, buffer, nullptr);
-    vkFreeMemory(vulkanDevice->_device, memory, nullptr);
+    vkDestroyBuffer(vulkanDevice->_device, asBuffer.buffer, nullptr);
+    vkFreeMemory(vulkanDevice->_device, asBuffer.memory, nullptr);
     vkDestroyAccelerationStructureKHR(vulkanDevice->_device, handle, nullptr);
 }
 
@@ -2008,7 +1984,7 @@ void AppBase::PolygonMesh::BuildBLAS(VulkanDevice* vulkanDevice) {
     geometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
     geometryInfo.geometry.triangles.vertexData = vertexBufferDeviceAddress;
     geometryInfo.geometry.triangles.maxVertex = maxVertex;
-    geometryInfo.geometry.triangles.vertexStride = sizeof(glTF::Vertex);
+    geometryInfo.geometry.triangles.vertexStride = vertexStride;
     geometryInfo.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
     geometryInfo.geometry.triangles.indexData = indexBufferDeviceAddress;
     geometryInfo.geometry.triangles.transformData.deviceAddress = 0;
@@ -2033,28 +2009,30 @@ vk::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t height, Vk
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = usage;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    vk::Image imageResource;
-    vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &imageResource.image);
+    VkImage image;
+    vkCreateImage(_vulkanDevice->_device, &imageInfo, nullptr, &image);
 
     VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(_vulkanDevice->_device, imageResource.image, &memRequirements);
+    vkGetImageMemoryRequirements(_vulkanDevice->_device, image, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = _vulkanDevice->FindMemoryType(memRequirements.memoryTypeBits, memProps);
 
-    if (vkAllocateMemory(_vulkanDevice->_device, &allocInfo, nullptr, &imageResource.memory) != VK_SUCCESS) {
+    VkDeviceMemory memory;
+    if (vkAllocateMemory(_vulkanDevice->_device, &allocInfo, nullptr, &memory) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate image memory!");
     }
 
-    vkBindImageMemory(_vulkanDevice->_device, imageResource.image, imageResource.memory, 0);
+    vkBindImageMemory(_vulkanDevice->_device, image, memory, 0);
 
     //create image view
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = imageResource.image;
+    viewInfo.image = image;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = format;
     viewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
@@ -2064,10 +2042,15 @@ vk::Image AppBase::CreateTextureImageAndView(uint32_t width, uint32_t height, Vk
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
-    if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &imageResource.view) != VK_SUCCESS) {
+    VkImageView view;
+    if (vkCreateImageView(_vulkanDevice->_device, &viewInfo, nullptr, &view) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture image view!");
     }
 
+    vk::Image imageResource;
+    imageResource.image = image;
+    imageResource.memory = memory;
+    imageResource.view = view;
     return imageResource;
 }
 
@@ -2094,7 +2077,7 @@ vk::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags u
 
     vk::Image textureResource = CreateTextureImageAndView(
         width, height,
-        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_ASPECT_COLOR_BIT,
         usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         memProps
@@ -2268,7 +2251,7 @@ vk::Image AppBase::CreateTextureCube(const wchar_t* fileNames[6], VkImageUsageFl
 
     }
     cubeMap.SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
-    _vulkanDevice->EndCommand(commandBuffer, _vulkanDevice->_queue);
+    _vulkanDevice->FlushCommandBuffer(commandBuffer, _vulkanDevice->_queue);
 
     for (auto buffer : buffers) {
         vkDestroyBuffer(_vulkanDevice->_device, buffer.buffer, nullptr);
@@ -2290,7 +2273,7 @@ void AppBase::PrepareMesh() {
         const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
         s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
 
-        r_meshGlTF = new PolygonMesh(_vulkanDevice, s_model->_vertices, s_model->_indices, 0);
+        r_meshGlTF = new PolygonMesh(_vulkanDevice, s_model->_vertices, s_model->_indices, sizeof(glTF::Vertex));
     }
 
     
@@ -2319,7 +2302,7 @@ void AppBase::PrepareMesh() {
 
         planeVertexBuffer = _vulkanDevice->CreateBuffer(
             vertexSize,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
         planeVertexBuffer.count = uint32_t(vertices.size());
@@ -2343,7 +2326,7 @@ void AppBase::PrepareMesh() {
 
         planeIndexBuffer = _vulkanDevice->CreateBuffer(
             indexSize,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
         planeIndexBuffer.count = uint32_t(indices.size());
@@ -2456,6 +2439,9 @@ void AppBase::CreateSceneBuffers() {
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
         );
+
+        //write info to storage buffer
+        _vulkanDevice->CopyBuffer(stagingBuffer.buffer, r_objectStorageBuffer.buffer, objectStorageBufferSize);
     }
 }
 
@@ -2466,13 +2452,13 @@ void AppBase::CreateTLAS() {
 
     instance.instanceCustomIndex = 0;
     instance.mask = 0xFF;
-    instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+    instance.flags = 0;
 
     for (auto obj : r_sceneObjects) {
         auto asInstance = instance;
         asInstance.transform = utils::ConvertFrom4x4To3x4(obj.transform);
         asInstance.instanceCustomIndex = obj.index;
-        asInstance.instanceShaderBindingTableRecordOffset = obj.offset;
+        asInstance.instanceShaderBindingTableRecordOffset = obj.shaderOffset;
         asInstance.accelerationStructureReference = obj.mesh->blas->deviceAddress;
         instances.push_back(asInstance);
     }
@@ -2485,7 +2471,7 @@ void AppBase::CreateTLAS() {
     );
 
     vkMapMemory(_vulkanDevice->_device, r_instanceBuffer.memory, 0, VK_WHOLE_SIZE, 0, &r_instanceBuffer.mapped);
-    memcpy(r_instanceBuffer.mapped, &instance, instanceBufferSize);
+    memcpy(r_instanceBuffer.mapped, instances.data(), instanceBufferSize);
     vkUnmapMemory(_vulkanDevice->_device, r_instanceBuffer.memory);
 
     VkDeviceOrHostAddressConstKHR instanceDataDeviceAddress{};
@@ -2524,30 +2510,22 @@ void AppBase::UpdateUniformBuffer() {
     _uniformData.lightColor = glm::vec4(1.0f);
     _uniformData.ambientColor = glm::vec4(0.25f);
     _uniformData.cameraPosition = _camera->position;
-    memcpy(static_cast<uint8_t*>(r_ubo.dynamicBuffer.mapped) + r_ubo.blockSize * _frameIndex, &_uniformData, sizeof(UniformBlock));
+    memcpy(r_uniformBuffer.mapped, &_uniformData, sizeof(UniformBlock));
 }
 
-void AppBase::CreateDynamicUniformBuffer(size_t size, VkBufferUsageFlags usage) {
+void AppBase::CreateUniformBuffer() {
     
-    auto bufferAlignment = _vulkanDevice->minUniformBufferOffsetAlignment;
+    VkDeviceSize bufferSize = sizeof(UniformBlock);
 
-    if (usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
-
-    }
-    if (usage & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR) {
-
-    }
-
-    r_ubo.blockSize = (size + bufferAlignment - 1) & ~(bufferAlignment - 1);
-    VkDeviceSize bufferSize = r_ubo.blockSize * _swapchain->_imageCount;
-
-    r_ubo.dynamicBuffer = _vulkanDevice->CreateBuffer(
+    r_uniformBuffer = _vulkanDevice->CreateBuffer(
         bufferSize,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
-    vkMapMemory(_vulkanDevice->_device, r_ubo.dynamicBuffer.memory, 0, VK_WHOLE_SIZE, 0, &r_ubo.dynamicBuffer.mapped);
+    vkMapMemory(_vulkanDevice->_device, r_uniformBuffer.memory, 0, VK_WHOLE_SIZE, 0, &r_uniformBuffer.mapped);
+
+    UpdateUniformBuffer();
 }
 
 void AppBase::CreateRaytracingLayout() {
@@ -2567,7 +2545,7 @@ void AppBase::CreateRaytracingLayout() {
     //uniform buffer
     VkDescriptorSetLayoutBinding uniformBufferBinding{};
     uniformBufferBinding.binding = 2;
-    uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+    uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uniformBufferBinding.descriptorCount = 1;
     uniformBufferBinding.stageFlags = VK_SHADER_STAGE_ALL;
 
@@ -2751,11 +2729,11 @@ void AppBase::CreateDescriptorSets() {
     
     //create descriptorPool
     std::vector<VkDescriptorPoolSize> poolSizes = {
-        { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR , 1 },
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE , 1 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , 1 },
-        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2 },
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 }
+        { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR , 10 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE , 10 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , 10 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10 }
     };
 
     VkDescriptorPoolCreateInfo poolInfo{};
@@ -2798,7 +2776,7 @@ void AppBase::CreateDescriptorSets() {
     {
         VkDescriptorImageInfo imageInfo{};
         imageInfo.imageView = r_strageImage.view;
-        imageInfo.imageLayout = r_strageImage.currentLayout;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
         writeDescriptorSetsInfo[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writeDescriptorSetsInfo[1].dstSet = r_descriptorSet;
@@ -2810,15 +2788,15 @@ void AppBase::CreateDescriptorSets() {
     
     {
         VkDescriptorBufferInfo sceneInfo{};
-        sceneInfo.buffer = r_ubo.dynamicBuffer.buffer;
+        sceneInfo.buffer = r_uniformBuffer.buffer;
         sceneInfo.offset = 0;
-        sceneInfo.range = r_ubo.blockSize;
+        sceneInfo.range = VK_WHOLE_SIZE;
 
         writeDescriptorSetsInfo[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writeDescriptorSetsInfo[2].dstSet = r_descriptorSet;
         writeDescriptorSetsInfo[2].dstBinding = 2;
         writeDescriptorSetsInfo[2].descriptorCount = 1;
-        writeDescriptorSetsInfo[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        writeDescriptorSetsInfo[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         writeDescriptorSetsInfo[2].pBufferInfo = &sceneInfo;
     }
 
@@ -2896,7 +2874,8 @@ void AppBase::InitRayTracing() {
 
     CreateTLAS();
     CreateStrageImage();
-    CreateDynamicUniformBuffer(sizeof(UniformBlock), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+    CreateUniformBuffer();
+    
     CreateRaytracingLayout();
     _shader = new Shader();
     _shader->Connect(_vulkanDevice);
@@ -3124,7 +3103,7 @@ void AppBase::Destroy() {
     //raytracing
     s_model->Destroy();
     r_instanceBuffer.Destroy(_vulkanDevice->_device);
-    r_ubo.dynamicBuffer.Destroy(_vulkanDevice->_device);
+    r_uniformBuffer.Destroy(_vulkanDevice->_device);
     r_raygenShaderBindingTable.Destroy(_vulkanDevice->_device);
     r_missShaderBindingTable.Destroy(_vulkanDevice->_device);
     r_hitShaderBindingTable.Destroy(_vulkanDevice->_device);
@@ -3133,8 +3112,8 @@ void AppBase::Destroy() {
     r_meshGlTF->indexBuffer.Destroy(_vulkanDevice->_device);
 
 
-    vkDestroyBuffer(_vulkanDevice->_device, r_topLevelAS->buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, r_topLevelAS->memory, nullptr);
+    vkDestroyBuffer(_vulkanDevice->_device, r_topLevelAS->asBuffer.buffer, nullptr);
+    vkFreeMemory(_vulkanDevice->_device, r_topLevelAS->asBuffer.memory, nullptr);
     vkDestroyAccelerationStructureKHR(_vulkanDevice->_device, r_topLevelAS->handle, nullptr);
 
     r_strageImage.Destroy(_vulkanDevice->_device);

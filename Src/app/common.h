@@ -29,6 +29,7 @@ namespace vk {
 		VkDeviceMemory memory;
 		int count;
 		void* mapped;
+		VkDeviceAddress address;
 
 		void Flush(VkDevice& device, size_t uploadSize)
 		{
@@ -49,14 +50,10 @@ namespace vk {
 			VkBufferDeviceAddressInfo bufferDeviceInfo{};
 			bufferDeviceInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 			bufferDeviceInfo.buffer = buffer;
-			return vkGetBufferDeviceAddressKHR(device, &bufferDeviceInfo);
+			address = vkGetBufferDeviceAddressKHR(device, &bufferDeviceInfo);
+			return address;
 		}
 
-	};
-
-	struct DynamicBuffer {
-		Buffer dynamicBuffer;
-		uint64_t blockSize;
 	};
 	
 	struct Image {
