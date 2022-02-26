@@ -1664,7 +1664,8 @@ void AppBase::CreateDepthResources() {
 
     if (depthFormat > VK_FORMAT_D16_UNORM_S8_UINT) {
         _depthImage = CreateTextureImageAndView(
-            WIDTH, HEIGHT,
+            _swapchain->_extent.width,
+            _swapchain->_extent.height,
             depthFormat,
             VK_IMAGE_ASPECT_STENCIL_BIT,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1673,7 +1674,8 @@ void AppBase::CreateDepthResources() {
     }
     else {
         _depthImage = CreateTextureImageAndView(
-            WIDTH, HEIGHT,
+            _swapchain->_extent.width,
+            _swapchain->_extent.height,
             depthFormat,
             VK_IMAGE_ASPECT_DEPTH_BIT,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1754,7 +1756,9 @@ void AppBase::BuildCommandBuffers(uint32_t index, bool renderImgui) {
     vkCmdTraceRaysKHR(
         commandBuffer,
         &raygenRegion, &missRegion, &hitRegion, &callableSbtEntry,
-        WIDTH, HEIGHT, 1
+        _swapchain->_extent.width,
+        _swapchain->_extent.height,
+        1
     );
 
     //copy raytracing result to back buffer
@@ -1763,7 +1767,7 @@ void AppBase::BuildCommandBuffers(uint32_t index, bool renderImgui) {
     r_strageImage.SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1);
 
     VkImageCopy copyRegion{};
-    copyRegion.extent = { WIDTH,HEIGHT,1 };
+    copyRegion.extent = { _swapchain->_extent.width, _swapchain->_extent.height, 1 };
     copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
     copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,0,0,1 };
 
@@ -1856,7 +1860,7 @@ void AppBase::Initialize() {
     _camera = new Camera();
     _camera->type = Camera::CameraType::firstperson;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
-    _camera->setPerspective(60.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 512.0f);
+    _camera->setPerspective(60.0f, (float)_swapchain->_extent.width / (float)_swapchain->_extent.height, 0.1f, 512.0f);
     _camera->setTranslation(glm::vec3(0.0f, 0.5f, -2.0f));
     
 
@@ -2501,7 +2505,8 @@ void AppBase::CreateTLAS() {
 void AppBase::CreateStrageImage() {
 
     r_strageImage = CreateTextureImageAndView(
-        WIDTH, HEIGHT,
+        _swapchain->_extent.width,
+        _swapchain->_extent.height,
         SWAPCHAIN_COLOR_FORMAT,
         VK_IMAGE_ASPECT_COLOR_BIT,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
@@ -2898,26 +2903,42 @@ void AppBase::InitRayTracing() {
 
 void AppBase::RecreateSwapChain() {
 
-    //フレームバッファを作成し直す
-    //ビューポートサイズはグラフィックスパイプラインの作成時に指定されるので、パイプラインを再構築する。
+    //recreate frame buffer
     int width = 0, height = 0;
     glfwGetFramebufferSize(_window, &width, &height);
     while (width == 0 || height == 0) {
         glfwGetFramebufferSize(_window, &width, &height);
         glfwWaitEvents();
     }
-
-    //コマンドが終了するまで待つ
+    //wait for command finished
     vkDeviceWaitIdle(_vulkanDevice->_device);
 
     CleanupSwapchain();
     _swapchain->CreateSwapChain(_vulkanDevice->FindQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT));
+    auto commandBuffer = _vulkanDevice->BeginCommand();
+    for (auto swapchainImage : _swapchain->_swapchainImages) {
+        swapchainImage.SetImageLayout(commandBuffer, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
+    }
+    _vulkanDevice->FlushCommandBuffer(commandBuffer, _vulkanDevice->_queue);
+
+    //raytracing
+    CreateStrageImage();
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageView = r_strageImage.view;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet writeDescriptorSetInfo{};
+    writeDescriptorSetInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetInfo.dstSet = r_descriptorSet;
+    writeDescriptorSetInfo.dstBinding = 1;
+    writeDescriptorSetInfo.descriptorCount = 1;
+    writeDescriptorSetInfo.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writeDescriptorSetInfo.pImageInfo = &imageInfo;
+    vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &writeDescriptorSetInfo, 0, nullptr);
 
     CreateRenderPass();
-    CreateGraphicsPipeline();
     CreateDepthResources();
     CreateFramebuffers();
-    s_model->Recreate();
     CreateCommandBuffers();
 
     _camera->UpdateAspectRatio((float)width / (float)height);
@@ -3103,7 +3124,7 @@ void AppBase::CleanupSwapchain() {
         vkDestroyFence(_vulkanDevice->_device, frameCommandBuffer.fence, nullptr);
     }
     vkDestroyRenderPass(_vulkanDevice->_device, _renderPass, nullptr);
-    s_model->Cleanup();
+    r_strageImage.Destroy(_vulkanDevice->_device);
 }
 
 void AppBase::Destroy() {
@@ -3111,6 +3132,7 @@ void AppBase::Destroy() {
     CleanupSwapchain();
    
     //raytracing
+    s_model->Cleanup();
     s_model->Destroy();
     r_instanceBuffer.Destroy(_vulkanDevice->_device);
     r_uniformBuffer.Destroy(_vulkanDevice->_device);
@@ -3130,7 +3152,6 @@ void AppBase::Destroy() {
     }
     r_topLevelAS->Destroy();
 
-    r_strageImage.Destroy(_vulkanDevice->_device);
 
     
     vkDestroyDescriptorSetLayout(_vulkanDevice->_device, r_descriptorSetLayout, nullptr);

@@ -444,5 +444,4 @@ public:
 
     uint32_t _frameIndex = 0;
 
-
 };
