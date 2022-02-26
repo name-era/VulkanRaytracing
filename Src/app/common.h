@@ -25,11 +25,11 @@ namespace vk {
 	};
 
 	struct Buffer {
-		VkBuffer buffer;
-		VkDeviceMemory memory;
-		int count;
+		VkBuffer buffer = VK_NULL_HANDLE;
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		int count = 0;
 		void* mapped;
-		VkDeviceAddress address;
+		VkDeviceAddress address = 0;
 
 		void Flush(VkDevice& device, size_t uploadSize)
 		{
@@ -57,23 +57,23 @@ namespace vk {
 	};
 	
 	struct Image {
-		VkImage image;
-		VkDeviceMemory memory;
-		VkImageView view;
-		VkSampler sampler;
+		VkImage image = VK_NULL_HANDLE;
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		VkImageView view = VK_NULL_HANDLE;
+		VkSampler sampler = VK_NULL_HANDLE;
 		VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		uint32_t layerCount = 1;
 		void Destroy(VkDevice device) {
-			if (image != NULL) {
+			if (image != VK_NULL_HANDLE) {
 				vkDestroyImage(device, image, nullptr);
 			}
-			if (memory != NULL) {
+			if (memory != VK_NULL_HANDLE) {
 				vkDestroyImageView(device, view, nullptr);
 			}
-			if (view != NULL) {
+			if (view != VK_NULL_HANDLE) {
 				vkFreeMemory(device, memory, nullptr);
 			}
-			if (sampler != NULL) {
+			if (sampler != VK_NULL_HANDLE) {
 				vkDestroySampler(device, sampler, nullptr);
 			}
 		}

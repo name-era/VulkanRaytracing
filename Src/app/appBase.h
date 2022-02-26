@@ -84,6 +84,11 @@ public:
 
         uint32_t shaderOffset = 0;
         uint32_t index = 0;
+        void Destroy(VkDevice device) {
+            mesh->vertexBuffer.Destroy(device);
+            mesh->indexBuffer.Destroy(device);
+            mesh->blas->Destroy();
+        }
     };
 
     struct PrimParam
@@ -417,12 +422,12 @@ public:
     std::vector<SceneObject> r_sceneObjects;
     vk::Buffer r_materialStorageBuffer;
     vk::Buffer r_objectStorageBuffer;
+
     std::vector<vk::Image> r_textures;
     vk::Image r_cubeMap;
 
     //TLAS
     AccelerationStructure* r_topLevelAS;
-    
     vk::Image r_strageImage;
 
     VkDescriptorSetLayout r_descriptorSetLayout;

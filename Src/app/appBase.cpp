@@ -1129,11 +1129,6 @@ void glTF::Model::Cleanup() {
 
 void glTF::Model::Destroy() {
     
-    vkDestroyBuffer(_vulkanDevice->_device, _vertices.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, _vertices.memory, nullptr);
-    vkDestroyBuffer(_vulkanDevice->_device, _indices.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, _indices.memory, nullptr);
-
     for (auto texture : _textures) {
         texture.Destroy();
     }
@@ -1435,7 +1430,7 @@ void AppBase::CreateRenderPass() {
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentDescription depthAttachment{};
@@ -3122,24 +3117,29 @@ void AppBase::Destroy() {
     r_raygenShaderBindingTable.Destroy(_vulkanDevice->_device);
     r_missShaderBindingTable.Destroy(_vulkanDevice->_device);
     r_hitShaderBindingTable.Destroy(_vulkanDevice->_device);
+    r_materialStorageBuffer.Destroy(_vulkanDevice->_device);
+    r_objectStorageBuffer.Destroy(_vulkanDevice->_device);
 
-    r_meshGlTF->vertexBuffer.Destroy(_vulkanDevice->_device);
-    r_meshGlTF->indexBuffer.Destroy(_vulkanDevice->_device);
+    for (auto texture : r_textures) {
+        texture.Destroy(_vulkanDevice->_device);
+    }
+    r_cubeMap.Destroy(_vulkanDevice->_device);
 
-
-    vkDestroyBuffer(_vulkanDevice->_device, r_topLevelAS->asBuffer.buffer, nullptr);
-    vkFreeMemory(_vulkanDevice->_device, r_topLevelAS->asBuffer.memory, nullptr);
-    vkDestroyAccelerationStructureKHR(_vulkanDevice->_device, r_topLevelAS->handle, nullptr);
+    for (auto sceneObj : r_sceneObjects) {
+        sceneObj.Destroy(_vulkanDevice->_device);
+    }
+    r_topLevelAS->Destroy();
 
     r_strageImage.Destroy(_vulkanDevice->_device);
 
+    
     vkDestroyDescriptorSetLayout(_vulkanDevice->_device, r_descriptorSetLayout, nullptr);
     vkDestroyDescriptorPool(_vulkanDevice->_device, r_descriptorPool, nullptr);
 
     vkDestroyPipelineLayout(_vulkanDevice->_device, r_pipelineLayout, nullptr);
     vkDestroyPipeline(_vulkanDevice->_device, r_pipeline, nullptr);
 
-    
+    //UI—p
     vkDestroyDescriptorPool(_vulkanDevice->_device, _descriptorPool, nullptr);
     ImGui_ImplVulkan_Shutdown();
 
