@@ -21,6 +21,9 @@ struct PrimMesh {
     uint64_t indexBuffer;
     uint64_t vertexBuffer;
     uint32_t materialIndex;
+    //メモリアラインメントを揃える4+8byte
+    int32_t padding0;
+    int64_t padding1;
 };
 
 struct Material {
@@ -28,6 +31,9 @@ struct Material {
     vec4 specular;
     int32_t materialType;
     int32_t textureIndex;
+    //メモリアラインメントを揃える4×2byte
+    int32_t padding0;
+    int32_t padding1;
 };
 
 layout(binding = BIND_TLAS, set = 0) uniform accelerationStructureEXT topLevelAS;

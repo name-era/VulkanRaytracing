@@ -11,14 +11,15 @@ layout(location = 0) rayPayloadInEXT Payload payload;
 hitAttributeEXT vec2 attribs;
 
 void main() {
-
+    
+ 
     payload.recursive = payload.recursive - 1;
     if(payload.recursive < 0) {
         payload.hitValue = vec3(0, 0, 0);
         return;
     }
 
-    const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
+    const vec3 barycentricCoords = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
     PrimMesh primMesh = primMeshes[gl_InstanceID];
 
     //vertex
@@ -40,22 +41,22 @@ void main() {
         albedo = texture(textures[nonuniformEXT(material.textureIndex)], vertex.uv).xyz;
     }
 
-    vec3 color = vec3(0);
+    vec3 color = vec3(0, 0, 0);
     //lambert
     if(material.materialType == 0) {
         vec3 toEyeDir = normalize(ubo.cameraPosition.xyz - worldPosition);
         color = LambertLight(worldNormal, tolightDir, albedo, lightColor, ubo.ambientColor.xyz);
         if(dotNL > 0) {
-            color += PhongSpecular(worldNormal, - tolightDir, toEyeDir, albedo, material.specular);
+            color += PhongSpecular(worldNormal, - tolightDir, toEyeDir, material.specular);
         }
     }
     //metal
     if(material.materialType == 1) {
-        Reflection(worldPosition, worldNormal, gl_WorldRayDirectionEXT);
+        color = Reflection(worldPosition, worldNormal, gl_WorldRayDirectionEXT);
     }
     //glass
     if(material.materialType == 2) {
-        Refraction(worldPosition, worldNormal, gl_WorldRayDirectionEXT);
+        color = Refraction(worldPosition, worldNormal, gl_WorldRayDirectionEXT);
     }
 
     payload.hitValue = color;

@@ -1431,7 +1431,7 @@ void AppBase::CreateRenderPass() {
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = SWAPCHAIN_COLOR_FORMAT;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -1750,7 +1750,6 @@ void AppBase::BuildCommandBuffers(uint32_t index, bool renderImgui) {
     }
 
     vkCmdSetCheckpointNV(commandBuffer, "Raytrace");
-
 
     //execute raytrace
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r_pipeline);
@@ -2378,6 +2377,7 @@ void AppBase::CreateSceneObject() {
     //glTF model
     r_gltfModel.transform = glm::mat4(1.0f);
     r_gltfModel.mesh = r_meshGlTF;
+    r_gltfModel.material.materialType = LAMBERT;
 
     //ceiling
     r_ceiling.transform = glm::mat4(1.0f);
@@ -2404,12 +2404,38 @@ void AppBase::CreateSceneBuffers() {
         materialParams.push_back(obj.material);
     }
 
+    //scene objects
+    {
+        auto objectStorageBufferSize = static_cast<uint32_t>(sizeof(PrimParam) * objParams.size());
+        auto stagingBuffer = _vulkanDevice->CreateBuffer(
+            objectStorageBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+
+        void* data;
+        vkMapMemory(_vulkanDevice->_device, stagingBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
+        memcpy(data, objParams.data(), objectStorageBufferSize);
+        vkUnmapMemory(_vulkanDevice->_device, stagingBuffer.memory);
+
+
+        r_objectStorageBuffer = _vulkanDevice->CreateBuffer(
+            objectStorageBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+
+        //write info to storage buffer
+        _vulkanDevice->CopyBuffer(stagingBuffer.buffer, r_objectStorageBuffer.buffer, objectStorageBufferSize);
+        stagingBuffer.Destroy(_vulkanDevice->_device);
+    }
+
     //materials
     {
 
         auto materialStorageBufferSize = static_cast<uint32_t>(sizeof(Material) * materialParams.size());
         auto stagingBuffer = _vulkanDevice->CreateBuffer(
-            static_cast<uint32_t>(sizeof(Material) * materialParams.size()),
+            materialStorageBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
@@ -2428,32 +2454,10 @@ void AppBase::CreateSceneBuffers() {
 
         //write info to storage buffer
         _vulkanDevice->CopyBuffer(stagingBuffer.buffer, r_materialStorageBuffer.buffer, materialStorageBufferSize);
+        stagingBuffer.Destroy(_vulkanDevice->_device);
     }
 
-    //scene objects
-    {
-        auto objectStorageBufferSize = static_cast<uint32_t>(sizeof(PrimParam) * objParams.size());
-        auto stagingBuffer = _vulkanDevice->CreateBuffer(
-            static_cast<uint32_t>(sizeof(Material) * materialParams.size()),
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
 
-        void* data;
-        vkMapMemory(_vulkanDevice->_device, stagingBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
-        memcpy(data, materialParams.data(), objectStorageBufferSize);
-        vkUnmapMemory(_vulkanDevice->_device, stagingBuffer.memory);
-
-
-        r_objectStorageBuffer = _vulkanDevice->CreateBuffer(
-            objectStorageBufferSize,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-        );
-
-        //write info to storage buffer
-        _vulkanDevice->CopyBuffer(stagingBuffer.buffer, r_objectStorageBuffer.buffer, objectStorageBufferSize);
-    }
 }
 
 void AppBase::CreateTLAS() {
@@ -2828,7 +2832,6 @@ void AppBase::CreateDescriptorSets() {
     {
         VkDescriptorBufferInfo primMeshInfo{};
         primMeshInfo.buffer = r_objectStorageBuffer.buffer;
-        primMeshInfo.offset = 0;
         primMeshInfo.range = VK_WHOLE_SIZE;
 
         writeDescriptorSetsInfo[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2842,7 +2845,6 @@ void AppBase::CreateDescriptorSets() {
     {
         VkDescriptorBufferInfo materialInfo{};
         materialInfo.buffer = r_materialStorageBuffer.buffer;
-        materialInfo.offset = 0;
         materialInfo.range = VK_WHOLE_SIZE;
 
         writeDescriptorSetsInfo[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2966,7 +2968,7 @@ void AppBase::drawFrame() {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
 
-    result = _swapchain->QueuePresent(_vulkanDevice->_queue, _frameIndex, _renderCompleteSemaphore);
+    _swapchain->QueuePresent(_vulkanDevice->_queue, _frameIndex, _renderCompleteSemaphore);
     vkQueueWaitIdle(_vulkanDevice->_queue);
 }
 
