@@ -32,7 +32,7 @@ void main() {
     Material material = materials[nonuniformEXT(materialIndex)];
 
     //lighting
-    vec3 tolightDir = normalize(- ubo.lightPos.xyz);
+    vec3 tolightDir = normalize(- ubo.lightDirection.xyz);
     vec3 lightColor = ubo.lightColor.xyz;
     float dotNL = dot(worldNormal, tolightDir);
 

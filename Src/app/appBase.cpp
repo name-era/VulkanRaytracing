@@ -947,7 +947,9 @@ void glTF::Model::CreateNodeDescriptorSets(glTF::Node* node) {
 void glTF::Model::CreateDescriptorSets() {
     
     for (auto node : _nodes) {
-        CreateNodeDescriptorSets(node);
+        if (node->mesh != NULL) {
+            CreateNodeDescriptorSets(node);
+        }
     }
     
     //material
@@ -2280,7 +2282,7 @@ void AppBase::PrepareMesh() {
         s_model->Connect(_vulkanDevice);
         s_model->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
-        s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
+        s_model->LoadFromFile("Assets/box/box.gltf", glTFLoadingFlags);
 
         r_meshGlTF = new PolygonMesh(_vulkanDevice, s_model->_vertices, s_model->_indices, sizeof(glTF::Vertex));
     }

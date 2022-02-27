@@ -42,7 +42,7 @@ layout(binding = BIND_IMAGE, set = 0, rgba8) uniform image2D image;
 layout(binding = BIND_SCENEPARAM, set = 0) uniform UBO {
     mat4 viewInverse;
     mat4 projInverse;
-    vec4 lightPos;
+    vec4 lightDirection;
     vec4 lightColor;
     vec4 ambientColor;
     vec3 cameraPosition;

@@ -13,7 +13,7 @@ void main() {
 
     float tmin = 0.001;
     float tmax = 10000.0;
-    payload.recursive=5;
+    payload.recursive = 1;
 
     traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, payload.origin.xyz, tmin, payload.direction.xyz, tmax, 0);
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(payload.hitValue, 0.0));
