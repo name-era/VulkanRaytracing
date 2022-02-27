@@ -6,7 +6,7 @@ struct Vertex {
 };
 
 layout(buffer_reference, scalar)readonly buffer Indices {uvec3 i[];};
-layout(buffer_reference, scalar)readonly buffer Vertices {Vertex v[];};
+layout(buffer_reference, buffer_reference_align = 4, scalar)readonly buffer Vertices {Vertex v[];};
 
 
 Vertex GetVertex(vec3 barycentricCoords, uint64_t indexBuffer, uint64_t vertexBuffer) {

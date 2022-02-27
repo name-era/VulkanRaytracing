@@ -15,6 +15,8 @@
 struct Payload {
     vec3 hitValue;
     int recursive;
+    vec4 origin;
+    vec4 direction;
 };
 
 struct PrimMesh {
@@ -32,8 +34,7 @@ struct Material {
     int32_t materialType;
     int32_t textureIndex;
     //メモリアラインメントを揃える4×2byte
-    int32_t padding0;
-    int32_t padding1;
+    int64_t padding0;
 };
 
 layout(binding = BIND_TLAS, set = 0) uniform accelerationStructureEXT topLevelAS;

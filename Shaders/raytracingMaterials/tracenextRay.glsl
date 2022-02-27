@@ -1,14 +1,27 @@
-vec3 Reflection(vec3 worldPosition, vec3 worldNormal, vec3 incidentRay) {
+vec3 Reflection(vec3 hitPos, vec3 worldNormal, vec3 incidentRay) {
     worldNormal = normalize(worldNormal);
     vec3 reflectedDir = reflect(incidentRay, worldNormal);
-
+    payload.direction.xyz = reflectedDir;
+    
     float tmin = 0.001;
     float tmax = 10000.0;
-    traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, worldPosition, tmin, reflectedDir, tmax, 0);
-    return payload.hitValue;
+    traceRayEXT(
+        topLevelAS,
+        gl_RayFlagsOpaqueEXT,
+        0xff,
+        0,
+        0,
+        0,
+        hitPos,
+        tmin,
+        payload.direction.xyz,
+        tmax,
+        0
+    );
+    return hitPos;
 }
 
-vec3 Refraction(vec3 worldPosition, vec3 worldNormal, vec3 incidentRay) {
+vec3 Refraction(vec3 hitPos, vec3 worldNormal, vec3 incidentRay) {
     worldNormal = normalize(worldNormal);
     const float refraction = 1.4;
     float direction = dot(worldNormal, incidentRay);
@@ -26,11 +39,13 @@ vec3 Refraction(vec3 worldPosition, vec3 worldNormal, vec3 incidentRay) {
 
     //if not refraction
     if(length(refractedDir) < 0.01) {
-        return Reflection(worldPosition, normal, incidentRay);
+        return Reflection(hitPos, normal, incidentRay);
     }
+
+    payload.direction.xyz = refractedDir;
 
     float tmin = 0.001;
     float tmax = 10000.0;
-    traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, worldPosition, tmin, refractedDir, tmax, 0);
+    traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, hitPos, tmin, payload.direction.xyz, tmax, 0);
     return payload.hitValue;
 }

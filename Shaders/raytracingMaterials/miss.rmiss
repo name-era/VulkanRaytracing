@@ -5,6 +5,6 @@
 layout(location = 0) rayPayloadInEXT Payload payload;
 
 void main() {
-    const vec3 worldRayDirection = normalize(gl_WorldRayDirectionEXT);
+    const vec3 worldRayDirection = gl_WorldRayDirectionEXT;
     payload.hitValue = texture(backGround, worldRayDirection).xyz;
 }

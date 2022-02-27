@@ -8,11 +8,10 @@ layout(location = 0) rayPayloadInEXT Payload payload;
 #include "calcLight.glsl"
 #include "traceNextRay.glsl"
 
-hitAttributeEXT vec2 attribs;
+hitAttributeEXT vec3 attribs;
 
 void main() {
     
- 
     payload.recursive = payload.recursive - 1;
     if(payload.recursive < 0) {
         payload.hitValue = vec3(0, 0, 0);
@@ -24,8 +23,9 @@ void main() {
 
     //vertex
     Vertex vertex = GetVertex(barycentricCoords, primMesh.indexBuffer, primMesh.vertexBuffer);
-    vec3 worldPosition = gl_ObjectToWorldEXT * vec4(vertex.pos, 1);
-    vec3 worldNormal = normalize(mat3(gl_ObjectToWorldEXT) * vertex.normal);
+    vec4 hitPos = payload.origin + payload.direction * gl_RayTmaxEXT;
+    vec3 worldNormal = mat3(gl_ObjectToWorldEXT) * vertex.normal;
+    payload.origin.xyz = hitPos.xyz + worldNormal * 0.01f;
 
     //material
     uint32_t materialIndex = primMesh.materialIndex;
@@ -34,7 +34,7 @@ void main() {
     //lighting
     vec3 tolightDir = normalize(- ubo.lightPos.xyz);
     vec3 lightColor = ubo.lightColor.xyz;
-    float dotNL = dot(tolightDir, worldNormal);
+    float dotNL = dot(worldNormal, tolightDir);
 
     vec3 albedo = material.diffuse.xyz;
     if(material.textureIndex > - 1) {
@@ -44,7 +44,7 @@ void main() {
     vec3 color = vec3(0, 0, 0);
     //lambert
     if(material.materialType == 0) {
-        vec3 toEyeDir = normalize(ubo.cameraPosition.xyz - worldPosition);
+        vec3 toEyeDir = normalize(ubo.cameraPosition.xyz - hitPos.xyz);
         color = LambertLight(worldNormal, tolightDir, albedo, lightColor, ubo.ambientColor.xyz);
         if(dotNL > 0) {
             color += PhongSpecular(worldNormal, - tolightDir, toEyeDir, material.specular);
@@ -52,11 +52,11 @@ void main() {
     }
     //metal
     if(material.materialType == 1) {
-        color = Reflection(worldPosition, worldNormal, gl_WorldRayDirectionEXT);
+        color = Reflection(hitPos.xyz, worldNormal, gl_WorldRayDirectionEXT);
     }
     //glass
     if(material.materialType == 2) {
-        color = Refraction(worldPosition, worldNormal, gl_WorldRayDirectionEXT);
+        color = Refraction(hitPos.xyz, worldNormal, gl_WorldRayDirectionEXT);
     }
 
     payload.hitValue = color;

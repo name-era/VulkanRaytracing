@@ -68,13 +68,12 @@ public:
     };
 
     struct Material {
-        glm::vec4 diffuse = glm::vec4(1.0f);
+        glm::vec4 diffuse = glm::vec4(0.6f);
         glm::vec4 specular = glm::vec4(1.0f, 1.0f, 1.0f, 20.0f);
         uint32_t materialType = LAMBERT;
         uint32_t textureIndex = -1;
-        //メモリアラインメントを揃える4*2byte
-        uint32_t padding0 = 0;
-        uint32_t padding1 = 0;
+        //memory alignment:4*2byte
+        uint64_t padding0 = 0;
     };
 
     struct SceneObject {
@@ -96,7 +95,7 @@ public:
         uint64_t indexBufferAddress;
         uint64_t vertexBufferAddress;
         uint32_t materialIndex;
-        //メモリアラインメントを揃える4+8byte
+        //memory alignment:4+8byte
         uint32_t padding0 = 0;
         uint64_t padding1 = 0;
     };

@@ -1006,8 +1006,8 @@ void glTF::Model::LoadFromFile(std::string filename, uint32_t fileLoadingFlags) 
                             vertex.normal = glm::normalize(glm::mat3(localMatrix) * vertex.normal);
                         }
                         if (fileLoadingFlags & FileLoadingFlags::FlipY) {
-                            vertex.pos.y *= -1.0f;
-                            vertex.normal.y *= -1.0f;
+                            //vertex.pos.y *= -1.0f;
+                            //vertex.normal.y *= -1.0f;
                         }
                         if (fileLoadingFlags & FileLoadingFlags::PreMultiplyVertexColors) {
                             vertex.color = primitive->material.baseColorFactor * vertex.color;
@@ -1861,7 +1861,7 @@ void AppBase::Initialize() {
     _camera->type = Camera::CameraType::firstperson;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)_swapchain->_extent.width / (float)_swapchain->_extent.height, 0.1f, 512.0f);
-    _camera->setTranslation(glm::vec3(0.0f, 0.5f, -2.0f));
+    _camera->setTranslation(glm::vec3(0.0f, -1.0f, 2.0f));
     
 
 
@@ -2086,7 +2086,7 @@ vk::Image AppBase::Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags u
 
     vk::Image textureResource = CreateTextureImageAndView(
         width, height,
-        VK_FORMAT_B8G8R8A8_UNORM,
+        IMAGE_FORMAT,
         VK_IMAGE_ASPECT_COLOR_BIT,
         usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         memProps
@@ -2353,7 +2353,7 @@ void AppBase::PrepareMesh() {
 void AppBase::PrepareTexture() {
 
     //ceiling texture
-    for (const auto* fileName : { L"Assets/textures/trianglify-lowres.png", L"Assets/textures/land_ocean_ice_cloud.jpg" }) {
+    for (const auto* fileName : { L"Assets/textures/icon.png", L"Assets/textures/land_ocean_ice_cloud.jpg" }) {
         auto usage = VK_IMAGE_USAGE_SAMPLED_BIT;
         r_textures.push_back(Create2DTexture(fileName, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     }
@@ -2376,7 +2376,7 @@ void AppBase::CreateSceneObject() {
     //glTF model
     r_gltfModel.transform = glm::mat4(1.0f);
     r_gltfModel.mesh = r_meshGlTF;
-    r_gltfModel.material.materialType = LAMBERT;
+    r_gltfModel.material.materialType = METAL;
 
     //ceiling
     r_ceiling.transform = glm::mat4(1.0f);

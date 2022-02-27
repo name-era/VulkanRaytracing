@@ -96,10 +96,10 @@ namespace PrimitiveMesh {
 	{
 		glm::vec4 color = glm::vec4(1, 1, 1, 1);
 		Vertex srcVertices[] = {
-			Vertex{ {-1.0f, 0.0f,-1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f}, color },
-			Vertex{ {-1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f}, color },
-			Vertex{ { 1.0f, 0.0f,-1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f}, color },
-			Vertex{ { 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f}, color },
+			Vertex{ {-1.0f, -1.0f,-1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f}, color },
+			Vertex{ {-1.0f, -1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f}, color },
+			Vertex{ { 1.0f, -1.0f,-1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f}, color },
+			Vertex{ { 1.0f, -1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 1.0f}, color },
 		};
 		vertices.resize(4);
 
