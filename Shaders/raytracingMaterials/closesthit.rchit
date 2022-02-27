@@ -1,5 +1,4 @@
 #version 460
-
 #extension GL_GOOGLE_include_directive : enable
 #include "common.glsl"
 layout(location = 0) rayPayloadInEXT Payload payload;
@@ -23,9 +22,9 @@ void main() {
 
     //vertex
     Vertex vertex = GetVertex(barycentricCoords, primMesh.indexBuffer, primMesh.vertexBuffer);
-    vec4 hitPos = payload.origin + payload.direction * gl_RayTmaxEXT;
+    //vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+    vec3 worldPos = vec3(gl_ObjectToWorldEXT * vec4(vertex.pos.xyz, 1.0));
     vec3 worldNormal = mat3(gl_ObjectToWorldEXT) * vertex.normal;
-    payload.origin.xyz = hitPos.xyz + worldNormal * 0.01f;
 
     //material
     uint32_t materialIndex = primMesh.materialIndex;
@@ -44,7 +43,7 @@ void main() {
     vec3 color = vec3(0, 0, 0);
     //lambert
     if(material.materialType == 0) {
-        vec3 toEyeDir = normalize(ubo.cameraPosition.xyz - hitPos.xyz);
+        vec3 toEyeDir = normalize(ubo.cameraPosition.xyz - worldPos);
         color = LambertLight(worldNormal, tolightDir, albedo, lightColor, ubo.ambientColor.xyz);
         if(dotNL > 0) {
             color += PhongSpecular(worldNormal, - tolightDir, toEyeDir, material.specular);
@@ -52,11 +51,11 @@ void main() {
     }
     //metal
     if(material.materialType == 1) {
-        color = Reflection(hitPos.xyz, worldNormal, gl_WorldRayDirectionEXT);
+        color = Reflection(worldPos, worldNormal, gl_WorldRayDirectionEXT);
     }
     //glass
     if(material.materialType == 2) {
-        color = Refraction(hitPos.xyz, worldNormal, gl_WorldRayDirectionEXT);
+        color = Refraction(worldPos, worldNormal, gl_WorldRayDirectionEXT);
     }
 
     payload.hitValue = color;

@@ -15,8 +15,6 @@
 struct Payload {
     vec3 hitValue;
     int recursive;
-    vec4 origin;
-    vec4 direction;
 };
 
 struct PrimMesh {
@@ -52,5 +50,3 @@ layout(binding = BIND_BACKGROUND, set = 0) uniform samplerCube backGround;
 layout(binding = BIND_OBJECTLIST, set = 0) readonly buffer _PrimMesh {PrimMesh primMeshes[]; };
 layout(binding = BIND_MATERIALLIST, set = 0) readonly buffer _Material {Material materials[]; };
 layout(binding = BIND_TEXTURELIST, set = 0) uniform sampler2D textures[];
-
-layout(constant_id = 0) const int MAX_RECURSION = 0;

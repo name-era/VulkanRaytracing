@@ -1863,7 +1863,7 @@ void AppBase::Initialize() {
     _camera->type = Camera::CameraType::firstperson;
     _camera->setRotation(glm::vec3(0.0f, 0.0f, 0.0f));
     _camera->setPerspective(60.0f, (float)_swapchain->_extent.width / (float)_swapchain->_extent.height, 0.1f, 512.0f);
-    _camera->setTranslation(glm::vec3(0.0f, -1.0f, 2.0f));
+    _camera->setTranslation(glm::vec3(1.0f, -1.0f, 2.0f));
     
 
 
@@ -2282,7 +2282,7 @@ void AppBase::PrepareMesh() {
         s_model->Connect(_vulkanDevice);
         s_model->SetMemoryPropertyFlags(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         const uint32_t glTFLoadingFlags = glTF::FileLoadingFlags::PreTransformVertices | glTF::FileLoadingFlags::PreMultiplyVertexColors | glTF::FileLoadingFlags::FlipY;
-        s_model->LoadFromFile("Assets/box/box.gltf", glTFLoadingFlags);
+        s_model->LoadFromFile("Assets/reflectionScene/reflectionScene.gltf", glTFLoadingFlags);
 
         r_meshGlTF = new PolygonMesh(_vulkanDevice, s_model->_vertices, s_model->_indices, sizeof(glTF::Vertex));
     }
@@ -2525,7 +2525,7 @@ void AppBase::UpdateUniformBuffer() {
     _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
     _uniformData.lightDirection = glm::vec4(-0.2f, -1.0f, -1.0f, 0.0f);
     _uniformData.lightColor = glm::vec4(1.0f);
-    _uniformData.ambientColor = glm::vec4(0.25f);
+    _uniformData.ambientColor = glm::vec4(0.5f);
     _uniformData.cameraPosition = _camera->position;
     memcpy(r_uniformBuffer.mapped, &_uniformData, sizeof(UniformBlock));
 }
@@ -2633,19 +2633,16 @@ void AppBase::CreateRaytracingPipeline() {
     r_shaderGroups.push_back(raygenShaderGroup);
     stages.push_back(rgStage);
     
-    VkSpecializationMapEntry specializationMapEntry{};
-    specializationMapEntry.constantID = 0;
-    specializationMapEntry.offset = 0;
-    specializationMapEntry.size = sizeof(uint32_t);
-
-    uint32_t maxRecursion = 4;
-    VkSpecializationInfo specializationInfo{};
-    specializationInfo.mapEntryCount = 1;
-    specializationInfo.pMapEntries = &specializationMapEntry;
-    specializationInfo.dataSize = sizeof(maxRecursion);
-    specializationInfo.pData = &maxRecursion;
-
-    stages.back().pSpecializationInfo = &specializationInfo;
+    //VkSpecializationMapEntry specializationMapEntry{};
+    //specializationMapEntry.constantID = 0;
+    //specializationMapEntry.offset = 0;
+    //specializationMapEntry.size = sizeof(uint32_t);
+    //uint32_t maxRecursion = 4;
+    //VkSpecializationInfo specializationInfo{};
+    //specializationInfo.mapEntryCount = 1;
+    //specializationInfo.pMapEntries = &specializationMapEntry;
+    //specializationInfo.dataSize = sizeof(maxRecursion);
+    //specializationInfo.pData = &maxRecursion;
 
     //miss
     auto missStage = _shader->LoadShaderProgram("Shaders/raytracingMaterials/miss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
@@ -2679,7 +2676,7 @@ void AppBase::CreateRaytracingPipeline() {
     pipelineCreateInfo.pStages = stages.data();
     pipelineCreateInfo.groupCount = static_cast<uint32_t>(r_shaderGroups.size());
     pipelineCreateInfo.pGroups = r_shaderGroups.data();
-    pipelineCreateInfo.maxPipelineRayRecursionDepth = 1;
+    pipelineCreateInfo.maxPipelineRayRecursionDepth = 4;
     pipelineCreateInfo.layout = r_pipelineLayout;
 
     vkCreateRayTracingPipelinesKHR(_vulkanDevice->_device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &r_pipeline);
