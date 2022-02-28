@@ -2459,6 +2459,54 @@ void AppBase::CreateSceneObject() {
     r_sceneObjects.push_back(r_sphere);
 }
 
+void AppBase::UpdateMaterialsBuffer() {
+
+    r_materialStorageBuffer.Destroy(_vulkanDevice->_device);
+
+    std::vector<Material> materialParams;
+    for (auto obj : r_sceneObjects) {
+        materialParams.push_back(obj.material);
+    }
+
+    auto materialStorageBufferSize = static_cast<uint32_t>(sizeof(Material) * materialParams.size());
+    auto stagingBuffer = _vulkanDevice->CreateBuffer(
+        materialStorageBufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    void* data;
+    vkMapMemory(_vulkanDevice->_device, stagingBuffer.memory, 0, VK_WHOLE_SIZE, 0, &data);
+    memcpy(data, materialParams.data(), materialStorageBufferSize);
+    vkUnmapMemory(_vulkanDevice->_device, stagingBuffer.memory);
+
+    r_materialStorageBuffer = _vulkanDevice->CreateBuffer(
+        materialStorageBufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    //write info to storage buffer
+    _vulkanDevice->CopyBuffer(stagingBuffer.buffer, r_materialStorageBuffer.buffer, materialStorageBufferSize);
+    stagingBuffer.Destroy(_vulkanDevice->_device);
+
+    //update descriptor
+    VkDescriptorBufferInfo materialInfo{};
+    materialInfo.buffer = r_materialStorageBuffer.buffer;
+    materialInfo.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet writeDescriptorSetInfo{};
+    writeDescriptorSetInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetInfo.dstSet = r_descriptorSet;
+    writeDescriptorSetInfo.dstBinding = 5;
+    writeDescriptorSetInfo.descriptorCount = 1;
+    writeDescriptorSetInfo.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetInfo.pBufferInfo = &materialInfo;
+    
+
+    vkUpdateDescriptorSets(_vulkanDevice->_device, 1, &writeDescriptorSetInfo, 0, VK_NULL_HANDLE);
+}
+
 void AppBase::CreateSceneBuffers() {
     
     std::vector<PrimParam> objParams;
@@ -2469,6 +2517,7 @@ void AppBase::CreateSceneBuffers() {
         PrimParam objParam;
         objParam.vertexBufferAddress = mesh->vertexBuffer.GetBufferDeviceAddress(_vulkanDevice->_device);
         objParam.indexBufferAddress = mesh->indexBuffer.GetBufferDeviceAddress(_vulkanDevice->_device);
+        //one scene obj has one material
         objParam.materialIndex = uint32_t(materialParams.size());
         objParams.push_back(objParam);
         materialParams.push_back(obj.material);
@@ -2502,7 +2551,6 @@ void AppBase::CreateSceneBuffers() {
 
     //materials
     {
-
         auto materialStorageBufferSize = static_cast<uint32_t>(sizeof(Material) * materialParams.size());
         auto stagingBuffer = _vulkanDevice->CreateBuffer(
             materialStorageBufferSize,
@@ -2526,7 +2574,6 @@ void AppBase::CreateSceneBuffers() {
         _vulkanDevice->CopyBuffer(stagingBuffer.buffer, r_materialStorageBuffer.buffer, materialStorageBufferSize);
         stagingBuffer.Destroy(_vulkanDevice->_device);
     }
-
 
 }
 
@@ -3057,6 +3104,7 @@ void AppBase::drawFrame() {
 }
 
 void AppBase::ShowMenuFile() {
+
     ImGui::MenuItem("(demo menu)", NULL, false, false);
     if (ImGui::MenuItem("New")) {}
     if (ImGui::MenuItem("Open", "Ctrl+O")) {}
@@ -3137,6 +3185,7 @@ void AppBase::SetGUIWindow() {
             if (ImGui::MenuItem("Cut", "CTRL+X")) {}
             if (ImGui::MenuItem("Copy", "CTRL+C")) {}
             if (ImGui::MenuItem("Paste", "CTRL+V")) {}
+            if (ImGui::MenuItem("Paste", "CTRL+V")) {}
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -3150,6 +3199,21 @@ void AppBase::UpdateGUI() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     SetGUIWindow();
+
+    bool changed = false;
+    if (ImGui::CollapsingHeader("Sphere Material", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        Material material;
+        changed |= ImGui::RadioButton("Lambert", (int*)&material.materialType, LAMBERT);
+        ImGui::SameLine();
+        changed |= ImGui::RadioButton("Metal", (int*)&material.materialType, METAL);
+        ImGui::SameLine();
+        changed |= ImGui::RadioButton("Glass", (int*)&material.materialType, GLASS);
+        //gltf model
+        r_sceneObjects[0].material = material;
+    }
+
+    if (changed) UpdateMaterialsBuffer();
     ImGui::Render();
 }
 

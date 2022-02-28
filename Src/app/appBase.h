@@ -251,7 +251,7 @@ public:
     * @brief    シーンオブジェクトを作成する
     */
     void CreateSceneObject();
-
+    void UpdateMaterialsBuffer();
     /**
     * @brief    シーンのオブジェクト情報のバッファを作成する
     */
