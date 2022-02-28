@@ -32,7 +32,7 @@ vec3 Refraction(vec3 hitPos, vec3 worldNormal, vec3 incidentRay) {
         refractedDir = refract(incidentRay, worldNormal, 1.0 / refraction);
         normal = worldNormal;
     }else{
-        refractedDir = refract(incidentRay, worldNormal, refraction);
+        refractedDir = refract(incidentRay, -worldNormal, refraction);
         normal = -worldNormal;
     }
 
@@ -41,8 +41,20 @@ vec3 Refraction(vec3 hitPos, vec3 worldNormal, vec3 incidentRay) {
         return Reflection(hitPos, normal, incidentRay);
     }
 
-    float tmin = 0.001;
+    float tmin = 0.00001;
     float tmax = 10000.0;
-    traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, hitPos, tmin, refractedDir, tmax, 0);
+    traceRayEXT(
+        topLevelAS,
+        gl_RayFlagsOpaqueEXT,
+        0xff,
+        0,
+        0,
+        0,
+        hitPos,
+        tmin,
+        refractedDir,
+        tmax,
+        0
+    );
     return payload.hitValue;
 }

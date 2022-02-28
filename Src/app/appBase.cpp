@@ -2294,7 +2294,7 @@ void AppBase::PrepareMesh() {
         vk::Buffer planeIndexBuffer;
         std::vector <PrimitiveMesh::Vertex> vertices;
         std::vector<uint32_t> indices;
-        PrimitiveMesh::GetCeiling(vertices, indices);
+        PrimitiveMesh::GetPlane(vertices, indices);
         uint32_t vertexSize = static_cast<uint32_t>(vertices.size() * sizeof(PrimitiveMesh::Vertex));
         uint32_t indexSize = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
 
@@ -2350,12 +2350,74 @@ void AppBase::PrepareMesh() {
         r_meshPlane = new PolygonMesh(_vulkanDevice, planeVertexBuffer, planeIndexBuffer, uint32_t(sizeof(PrimitiveMesh::Vertex)));
     }
 
+    //sphere
+    {
+        vk::Buffer sphereVertexBuffer;
+        vk::Buffer sphereIndexBuffer;
+        std::vector <PrimitiveMesh::Vertex> vertices;
+        std::vector<uint32_t> indices;
+        PrimitiveMesh::GetSphere(vertices, indices, 1.0, 32, 32);
+        uint32_t vertexSize = static_cast<uint32_t>(vertices.size() * sizeof(PrimitiveMesh::Vertex));
+        uint32_t indexSize = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
+
+        //vertex
+        vk::Buffer vertexStaging;
+        vertexStaging = _vulkanDevice->CreateBuffer(
+            vertexSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+
+        void* data;
+        vkMapMemory(_vulkanDevice->_device, vertexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
+        memcpy(data, vertices.data(), vertexSize);
+        vkUnmapMemory(_vulkanDevice->_device, vertexStaging.memory);
+
+        sphereVertexBuffer = _vulkanDevice->CreateBuffer(
+            vertexSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+        sphereVertexBuffer.count = uint32_t(vertices.size());
+
+        _vulkanDevice->CopyBuffer(vertexStaging.buffer, sphereVertexBuffer.buffer, vertexSize);
+
+        vkDestroyBuffer(_vulkanDevice->_device, vertexStaging.buffer, nullptr);
+        vkFreeMemory(_vulkanDevice->_device, vertexStaging.memory, nullptr);
+
+        //index
+        vk::Buffer indexStaging;
+        indexStaging = _vulkanDevice->CreateBuffer(
+            indexSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
+
+        vkMapMemory(_vulkanDevice->_device, indexStaging.memory, 0, VK_WHOLE_SIZE, 0, &data);
+        memcpy(data, indices.data(), indexSize);
+        vkUnmapMemory(_vulkanDevice->_device, indexStaging.memory);
+
+        sphereIndexBuffer = _vulkanDevice->CreateBuffer(
+            indexSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+        sphereIndexBuffer.count = uint32_t(indices.size());
+
+        _vulkanDevice->CopyBuffer(indexStaging.buffer, sphereIndexBuffer.buffer, indexSize);
+
+        vkDestroyBuffer(_vulkanDevice->_device, indexStaging.buffer, nullptr);
+        vkFreeMemory(_vulkanDevice->_device, indexStaging.memory, nullptr);
+
+        r_meshSphere = new PolygonMesh(_vulkanDevice, sphereVertexBuffer, sphereIndexBuffer, uint32_t(sizeof(PrimitiveMesh::Vertex)));
+    }
+
 }
 
 void AppBase::PrepareTexture() {
 
     //ceiling texture
-    for (const auto* fileName : { L"Assets/textures/icon.png", L"Assets/textures/land_ocean_ice_cloud.jpg" }) {
+    for (const auto* fileName : { L"Assets/textures/trianglify-lowres.png", L"Assets/textures/land_ocean_ice_cloud.jpg" }) {
         auto usage = VK_IMAGE_USAGE_SAMPLED_BIT;
         r_textures.push_back(Create2DTexture(fileName, VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
     }
@@ -2372,6 +2434,7 @@ void AppBase::PrepareTexture() {
 void AppBase::CreateBLAS() {
     r_meshGlTF->BuildBLAS(_vulkanDevice);
     r_meshPlane->BuildBLAS(_vulkanDevice);
+    r_meshSphere->BuildBLAS(_vulkanDevice);
 }
 
 void AppBase::CreateSceneObject() {
@@ -2385,9 +2448,15 @@ void AppBase::CreateSceneObject() {
     r_ceiling.mesh = r_meshPlane;
     r_ceiling.material.textureIndex = TexID_Floor;
 
+    //sphere
+    r_sphere.transform = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
+    r_sphere.mesh = r_meshSphere;
+    r_sphere.material.materialType = GLASS;
+
     r_sceneObjects.clear();
     r_sceneObjects.push_back(r_gltfModel);
     r_sceneObjects.push_back(r_ceiling);
+    r_sceneObjects.push_back(r_sphere);
 }
 
 void AppBase::CreateSceneBuffers() {
@@ -2676,7 +2745,7 @@ void AppBase::CreateRaytracingPipeline() {
     pipelineCreateInfo.pStages = stages.data();
     pipelineCreateInfo.groupCount = static_cast<uint32_t>(r_shaderGroups.size());
     pipelineCreateInfo.pGroups = r_shaderGroups.data();
-    pipelineCreateInfo.maxPipelineRayRecursionDepth = 4;
+    pipelineCreateInfo.maxPipelineRayRecursionDepth =5;
     pipelineCreateInfo.layout = r_pipelineLayout;
 
     vkCreateRayTracingPipelinesKHR(_vulkanDevice->_device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &r_pipeline);

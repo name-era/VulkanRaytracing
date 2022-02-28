@@ -416,8 +416,11 @@ public:
 
     PolygonMesh* r_meshGlTF;
     PolygonMesh* r_meshPlane;
+    PolygonMesh* r_meshSphere;
     SceneObject r_gltfModel;
     SceneObject r_ceiling;
+    SceneObject r_sphere;
+
     std::vector<SceneObject> r_sceneObjects;
     vk::Buffer r_materialStorageBuffer;
     vk::Buffer r_objectStorageBuffer;

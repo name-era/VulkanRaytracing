@@ -8,6 +8,7 @@
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 
 #include <algorithm>
 #include <stdexcept>
@@ -92,7 +93,7 @@ namespace PrimitiveMesh {
 		glm::vec4 color;
 	};
 
-	inline void GetCeiling(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
+	inline void GetPlane(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
 	{
 		glm::vec4 color = glm::vec4(1, 1, 1, 1);
 		Vertex srcVertices[] = {
@@ -113,5 +114,54 @@ namespace PrimitiveMesh {
 		);
 
 		indices = { 0, 1, 2, 2, 1, 3 };
+	}
+
+
+	inline void GetSphere(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices, float radius, uint32_t slices, uint32_t stacks) {
+		//vertices
+		glm::vec4 color = glm::vec4(1, 1, 1, 1);
+		const float SLICES = (float)slices;
+		const float STACKS = (float)stacks;
+		for (uint32_t stack = 0; stack <= stacks; stack++) {
+			for (uint32_t slice = 0; slice <= slices; slice++) {
+				glm::vec3 p;
+				//-1`1
+				p.y = 2.0f * stack / STACKS - 1.0f;
+				//circle radius correspond to y
+				float r = std::sqrtf(1 - p.y * p.y);
+				//rotation x and z axis
+				float theta = 2.0f * glm::pi<float>() * slice / SLICES;
+				p.x = r * std::sinf(theta);
+				p.z = r * std::cosf(theta);
+				glm::vec3 v = p * radius;
+				glm::vec3 n = glm::normalize(v);
+				glm::vec2 uv = { float(slice) / SLICES,1.0 - float(stack) / STACKS };
+
+				Vertex vert;
+				vert.pos = v;
+				vert.normal = n;
+				vert.uv = uv;
+				vert.color = color;
+				vertices.push_back(vert);
+			}
+		}
+
+		//indices
+		uint32_t sliceNum = slices + 1;
+		for (uint32_t stack = 0; stack < STACKS; stack++) {
+			for (uint32_t slice = 0; slice < slices; slice++) {
+				uint32_t index = stack * sliceNum;
+				uint32_t i0 = index + slice;
+				uint32_t i1 = index + slice + 1;
+				uint32_t i2 = i0 + sliceNum;
+				uint32_t i3 = i1 + sliceNum;
+				indices.push_back(i0);
+				indices.push_back(i1);
+				indices.push_back(i2);
+				indices.push_back(i2);
+				indices.push_back(i1);
+				indices.push_back(i3);
+			}
+		}
 	}
 }
