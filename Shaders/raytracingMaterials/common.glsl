@@ -12,16 +12,19 @@
 #define BIND_MATERIALLIST   (5)
 #define BIND_TEXTURELIST    (6)
 
-struct Payload {
+struct HitPayload {
     vec3 hitValue;
     int recursive;
+};
+struct ShadowPayload{
+    bool isHit;
 };
 
 struct PrimMesh {
     uint64_t indexBuffer;
     uint64_t vertexBuffer;
     uint32_t materialIndex;
-    //メモリアラインメントを揃える4+8byte
+    //memory alignment 4+8byte
     int32_t padding0;
     int64_t padding1;
 };
@@ -31,7 +34,7 @@ struct Material {
     vec4 specular;
     int32_t materialType;
     int32_t textureIndex;
-    //メモリアラインメントを揃える4×2byte
+    //memory alignment 4×2byte
     int64_t padding0;
 };
 

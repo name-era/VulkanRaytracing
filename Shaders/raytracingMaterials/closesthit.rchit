@@ -1,7 +1,8 @@
 #version 460
 #extension GL_GOOGLE_include_directive : enable
 #include "common.glsl"
-layout(location = 0) rayPayloadInEXT Payload payload;
+layout(location = 0) rayPayloadInEXT HitPayload payload;
+layout(location = 1) rayPayloadInEXT ShadowPayload shadowPayload;
 
 #include "vertex.glsl"
 #include "calcLight.glsl"
@@ -31,9 +32,9 @@ void main() {
     Material material = materials[nonuniformEXT(materialIndex)];
 
     //lighting
-    vec3 tolightDir = normalize(- ubo.lightDirection.xyz);
+    vec3 toLightDir = normalize(- ubo.lightDirection.xyz);
     vec3 lightColor = ubo.lightColor.xyz;
-    float dotNL = dot(worldNormal, tolightDir);
+    float dotNL = dot(worldNormal, toLightDir);
 
     vec3 albedo = material.diffuse.xyz;
     if(material.textureIndex > - 1) {
@@ -41,12 +42,13 @@ void main() {
     }
 
     vec3 color = vec3(0, 0, 0);
+
     //lambert
     if(material.materialType == 0) {
         vec3 toEyeDir = normalize(ubo.cameraPosition.xyz - worldPos);
-        color = LambertLight(worldNormal, tolightDir, albedo, lightColor, ubo.ambientColor.xyz);
+        color = LambertLight(worldNormal, toLightDir, albedo, lightColor, ubo.ambientColor.xyz);
         if(dotNL > 0) {
-            color += PhongSpecular(worldNormal, - tolightDir, toEyeDir, material.specular);
+            color += PhongSpecular(worldNormal, - toLightDir, toEyeDir, material.specular);
         }
     }
     //metal
@@ -57,6 +59,9 @@ void main() {
     if(material.materialType == 2) {
         color = Refraction(worldPos, worldNormal, gl_WorldRayDirectionEXT);
     }
-
+    //shadow
+    if(ShootShadowRay(worldNormal, toLightDir, 0)){
+        color*=0.8;
+    }
     payload.hitValue = color;
 }

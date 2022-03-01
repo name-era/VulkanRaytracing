@@ -58,3 +58,29 @@ vec3 Refraction(vec3 hitPos, vec3 worldNormal, vec3 incidentRay) {
     );
     return payload.hitValue;
 }
+
+bool ShootShadowRay(vec3 hitPos, vec3 rayDirection, uint rayFlags){
+    rayFlags|=gl_RayFlagsSkipClosestHitShaderEXT;
+    rayFlags|=gl_RayFlagsTerminateOnFirstHitEXT;
+    uint cullMask=~(0x01);
+    const int shadowMissIndex=1;
+    const int shadowPayloadLocation=1;
+    float tmin = 0.00001;
+    float tmax = 10000.0;
+    
+    shadowPayload.isHit=true;
+    traceRayEXT(
+        topLevelAS,
+        rayFlags,
+        cullMask,
+        0,
+        0,
+        shadowMissIndex,
+        hitPos,
+        tmin,
+        rayDirection,
+        tmax,
+        shadowPayloadLocation
+    );
+    return shadowPayload.isHit;
+}

@@ -1,7 +1,8 @@
 #version 460
 #extension GL_GOOGLE_include_directive : enable
 #include "common.glsl"
-layout(location = 0) rayPayloadEXT Payload payload;
+layout(location = 0) rayPayloadEXT HitPayload payload;
+layout(location = 1) rayPayloadEXT ShadowPayload shadowPayload;
 
 void main() {
     const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
