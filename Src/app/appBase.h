@@ -112,7 +112,8 @@ public:
     enum ShaderGroups {
         raygenShaderIndex = 0,
         missShaderIndex = 1,
-        hitShaderIndex = 2
+        shadowMissShaderIndex = 2,
+        hitShaderIndex = 3
     };
 
     /**

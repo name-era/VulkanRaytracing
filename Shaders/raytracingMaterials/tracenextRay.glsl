@@ -72,7 +72,7 @@ bool ShootShadowRay(vec3 hitPos, vec3 rayDirection, uint rayFlags){
     traceRayEXT(
         topLevelAS,
         rayFlags,
-        cullMask,
+        0xff,
         0,
         0,
         shadowMissIndex,

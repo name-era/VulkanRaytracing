@@ -2441,7 +2441,7 @@ void AppBase::CreateSceneObject() {
     //glTF model
     r_gltfModel.transform = glm::mat4(1.0f);
     r_gltfModel.mesh = r_meshGlTF;
-    r_gltfModel.material.materialType = METAL;
+    r_gltfModel.material.materialType = LAMBERT;
 
     //ceiling
     r_ceiling.transform = glm::mat4(1.0f);
@@ -2451,7 +2451,7 @@ void AppBase::CreateSceneObject() {
     //sphere
     r_sphere.transform = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
     r_sphere.mesh = r_meshSphere;
-    r_sphere.material.materialType = GLASS;
+    r_sphere.material.materialType = METAL;
 
     r_sceneObjects.clear();
     r_sceneObjects.push_back(r_gltfModel);
@@ -2771,8 +2771,13 @@ void AppBase::CreateRaytracingPipeline() {
     missShaderGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
     r_shaderGroups.push_back(missShaderGroup);
     stages.push_back(missStage);
-    
 
+    //shadow miss
+    auto shadowMissStage = _shader->LoadShaderProgram("Shaders/raytracingMaterials/shadowMiss.rmiss.spv", VK_SHADER_STAGE_MISS_BIT_KHR);
+    missShaderGroup.generalShader = static_cast<uint32_t>(stages.size());
+    r_shaderGroups.push_back(missShaderGroup);
+    stages.push_back(shadowMissStage);
+    
     //closest hit
     auto chStage = _shader->LoadShaderProgram("Shaders/raytracingMaterials/closesthit.rchit.spv", VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
     VkRayTracingShaderGroupCreateInfoKHR closesthitShaderGroup{};
@@ -2831,7 +2836,7 @@ void AppBase::CreateShaderBindingTable() {
     const VkBufferUsageFlags bufferUsageFlags = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     const VkMemoryPropertyFlags propertyFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     r_raygenShaderBindingTable = _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags);
-    r_missShaderBindingTable = _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags);
+    r_missShaderBindingTable = _vulkanDevice->CreateBuffer(handleSize * 2, bufferUsageFlags, propertyFlags);
     r_hitShaderBindingTable = _vulkanDevice->CreateBuffer(handleSize, bufferUsageFlags, propertyFlags);
 
     vkMapMemory(_vulkanDevice->_device, r_raygenShaderBindingTable.memory, 0, VK_WHOLE_SIZE, 0, &r_raygenShaderBindingTable.mapped);
@@ -2839,7 +2844,7 @@ void AppBase::CreateShaderBindingTable() {
     vkMapMemory(_vulkanDevice->_device, r_hitShaderBindingTable.memory, 0, VK_WHOLE_SIZE, 0, &r_hitShaderBindingTable.mapped);
     
     memcpy(r_raygenShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * raygenShaderIndex, handleSize);
-    memcpy(r_missShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * missShaderIndex, handleSize);
+    memcpy(r_missShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * missShaderIndex, handleSize * 2);
     memcpy(r_hitShaderBindingTable.mapped, shaderHandleStorage.data() + handleSizeAligned * hitShaderIndex, handleSize);
     
     raygenRegion.deviceAddress = r_raygenShaderBindingTable.GetBufferDeviceAddress(_vulkanDevice->_device);
@@ -2848,11 +2853,11 @@ void AppBase::CreateShaderBindingTable() {
 
     missRegion.deviceAddress = r_missShaderBindingTable.GetBufferDeviceAddress(_vulkanDevice->_device);
     missRegion.stride = handleSizeAligned;
-    missRegion.size = handleSizeAligned;
+    missRegion.size = handleSizeAligned * 2;
 
     hitRegion.deviceAddress = r_hitShaderBindingTable.GetBufferDeviceAddress(_vulkanDevice->_device);
-    hitRegion.stride = handleAligned;
-    hitRegion.size = handleAligned;
+    hitRegion.stride = handleSizeAligned;
+    hitRegion.size = handleSizeAligned;
 }
 
 void AppBase::CreateDescriptorSets() {

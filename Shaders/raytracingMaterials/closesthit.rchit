@@ -50,6 +50,10 @@ void main() {
         if(dotNL > 0) {
             color += PhongSpecular(worldNormal, - toLightDir, toEyeDir, material.specular);
         }
+        //shadow
+        if(ShootShadowRay(worldPos, toLightDir, 0)){
+            color*=0.8;
+        }
     }
     //metal
     if(material.materialType == 1) {
@@ -59,9 +63,6 @@ void main() {
     if(material.materialType == 2) {
         color = Refraction(worldPos, worldNormal, gl_WorldRayDirectionEXT);
     }
-    //shadow
-    if(ShootShadowRay(worldNormal, toLightDir, 0)){
-        color*=0.8;
-    }
+
     payload.hitValue = color;
 }
