@@ -103,11 +103,11 @@ public:
     struct UniformBlock {
         glm::mat4 viewInverse;
         glm::mat4 projInverse;
-        glm::vec4 lightDirection;
-        glm::vec4 lightColor;
-        glm::vec4 ambientColor;
+        glm::vec4 lightDirection = glm::vec4(-0.2f, -1.0f, -1.0f, 0.0f);
+        glm::vec4 lightColor = glm::vec4(1.0f);
+        glm::vec4 ambientColor = glm::vec4(0.5f);
         glm::vec4 cameraPosition;
-        glm::vec4 pointLightPosition;
+        glm::vec4 pointLightPosition = glm::vec4(5.0, 10.0, 5.0, 0.0);
         int shaderFlags = 0;
     }_uniformData;
 
@@ -191,7 +191,7 @@ public:
     /**
     * @brief    exampleを使ったImGUIの表示
     */
-    void InitializeGUI();
+    void InitGUI();
 
     /**
     * @brief    深度リソースを作成する

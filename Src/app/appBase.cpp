@@ -1171,6 +1171,10 @@ static void FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 
 static void mouseButton(GLFWwindow* window, int button, int action, int modsy) {
 
+    if (ImGui::GetIO().WantCaptureMouse) {
+        return;
+    }
+
     AppBase* instance = static_cast<AppBase*>(glfwGetWindowUserPointer(window));
 
     if (instance != NULL) {
@@ -1188,6 +1192,11 @@ static void mouseButton(GLFWwindow* window, int button, int action, int modsy) {
 }
 
 void AppBase::MouseMove(double x, double y) {
+    
+    if (ImGui::GetIO().WantCaptureMouse) {
+        return;
+    }
+
     double dx = _mousePos.x - x;
     double dy = _mousePos.y - y;
     bool handled = false;
@@ -1218,6 +1227,10 @@ static void cursor(GLFWwindow* window, double xpos, double ypos) {
 }
 
 static void wheel(GLFWwindow* window, double x, double y) {
+
+    if (ImGui::GetIO().WantCaptureMouse) {
+        return;
+    }
 
     AppBase* instance = static_cast<AppBase*>(glfwGetWindowUserPointer(window));
 
@@ -1610,7 +1623,7 @@ void AppBase::CreateGraphicsPipeline() {
     }
 }
 
-void AppBase::InitializeGUI() {
+void AppBase::InitGUI() {
     
     VkDescriptorPoolSize pool_sizes[] =
     {
@@ -1869,7 +1882,7 @@ void AppBase::Initialize() {
 
     InitRayTracing();
     CreateRenderPass();
-    InitializeGUI();
+    InitGUI();
     CreateDepthResources();
     CreateFramebuffers();
     CreateCommandBuffers();
@@ -2639,11 +2652,7 @@ void AppBase::CreateStrageImage() {
 void AppBase::UpdateUniformBuffer() {
     _uniformData.projInverse = glm::inverse(_camera->matrix.perspective);
     _uniformData.viewInverse = glm::inverse(_camera->matrix.view);
-    _uniformData.lightDirection = glm::vec4(-0.2f, -1.0f, -1.0f, 0.0f);
-    _uniformData.lightColor = glm::vec4(1.0f);
-    _uniformData.ambientColor = glm::vec4(0.5f);
     _uniformData.cameraPosition = glm::vec4(_camera->position, 1.0);
-    _uniformData.pointLightPosition = glm::vec4(5.0, 10.0, 5.0, 0.0);
     memcpy(r_uniformBuffer.mapped, &_uniformData, sizeof(UniformBlock));
 }
 
@@ -3209,14 +3218,11 @@ void AppBase::UpdateGUI() {
     bool changed = false;
     if (ImGui::CollapsingHeader("Sphere Material", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        Material material;
-        changed |= ImGui::RadioButton("Lambert", (int*)&material.materialType, LAMBERT);
+        changed |= ImGui::RadioButton("Lambert", (int*)&r_sceneObjects[0].material.materialType, LAMBERT);
         ImGui::SameLine();
-        changed |= ImGui::RadioButton("Metal", (int*)&material.materialType, METAL);
+        changed |= ImGui::RadioButton("Metal", (int*)&r_sceneObjects[0].material.materialType, METAL);
         ImGui::SameLine();
-        changed |= ImGui::RadioButton("Glass", (int*)&material.materialType, GLASS);
-        //gltf model
-        r_sceneObjects[0].material = material;
+        changed |= ImGui::RadioButton("Glass", (int*)&r_sceneObjects[0].material.materialType, GLASS);
     }
     if (changed) UpdateMaterialsBuffer();
 
@@ -3227,6 +3233,8 @@ void AppBase::UpdateGUI() {
         ImGui::SameLine();
         ImGui::RadioButton("point light", (int*)&_uniformData.shaderFlags, 1);
     }
+    //point light pos
+    ImGui::DragFloat3("directional light vector", &_uniformData.lightDirection.x, 1.0f);
     //point light pos
     ImGui::DragFloat3("point light position", &_uniformData.pointLightPosition.x, 1.0f);
     ImGui::Render();
