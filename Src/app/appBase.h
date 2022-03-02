@@ -106,7 +106,9 @@ public:
         glm::vec4 lightDirection;
         glm::vec4 lightColor;
         glm::vec4 ambientColor;
-        glm::vec3 cameraPosition;
+        glm::vec4 cameraPosition;
+        glm::vec4 pointLightPosition;
+        int shaderFlags = 0;
     }_uniformData;
 
     enum ShaderGroups {

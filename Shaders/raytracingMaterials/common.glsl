@@ -46,7 +46,9 @@ layout(binding = BIND_SCENEPARAM, set = 0) uniform UBO {
     vec4 lightDirection;
     vec4 lightColor;
     vec4 ambientColor;
-    vec3 cameraPosition;
+    vec4 cameraPosition;
+    vec4 pointLightPosition;
+    int shaderFlags;
 } ubo;
 
 layout(binding = BIND_BACKGROUND, set = 0) uniform samplerCube backGround;

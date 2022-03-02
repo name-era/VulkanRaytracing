@@ -2642,7 +2642,8 @@ void AppBase::UpdateUniformBuffer() {
     _uniformData.lightDirection = glm::vec4(-0.2f, -1.0f, -1.0f, 0.0f);
     _uniformData.lightColor = glm::vec4(1.0f);
     _uniformData.ambientColor = glm::vec4(0.5f);
-    _uniformData.cameraPosition = _camera->position;
+    _uniformData.cameraPosition = glm::vec4(_camera->position, 1.0);
+    _uniformData.pointLightPosition = glm::vec4(5.0, 10.0, 5.0, 0.0);
     memcpy(r_uniformBuffer.mapped, &_uniformData, sizeof(UniformBlock));
 }
 
@@ -3217,8 +3218,17 @@ void AppBase::UpdateGUI() {
         //gltf model
         r_sceneObjects[0].material = material;
     }
-
     if (changed) UpdateMaterialsBuffer();
+
+    //light
+    if (ImGui::CollapsingHeader("light", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::RadioButton("directional light", (int*)&_uniformData.shaderFlags, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("point light", (int*)&_uniformData.shaderFlags, 1);
+    }
+    //point light pos
+    ImGui::DragFloat3("point light position", &_uniformData.pointLightPosition.x, 1.0f);
     ImGui::Render();
 }
 

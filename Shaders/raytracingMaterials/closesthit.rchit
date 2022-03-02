@@ -51,9 +51,19 @@ void main() {
             color += PhongSpecular(worldNormal, - toLightDir, toEyeDir, material.specular);
         }
         //shadow
-        if(ShootShadowRay(worldPos, toLightDir, 0)){
-            color*=0.8;
+        if(ubo.shaderFlags == 1){
+            //point light
+            vec3 toPointLightDir = ubo.pointLightPosition.xyz - worldPos.xyz;
+            if(ShootShadowRay(worldPos, toPointLightDir, 0)){
+                color*=0.8;
+            }
+        }else{
+            //directional light
+            if(ShootShadowRay(worldPos, toLightDir, 0)){
+                color*=0.1;
+            }
         }
+
     }
     //metal
     if(material.materialType == 1) {
