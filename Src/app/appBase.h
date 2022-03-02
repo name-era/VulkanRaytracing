@@ -83,6 +83,8 @@ public:
 
         uint32_t shaderOffset = 0;
         uint32_t index = 0;
+        uint32_t useShadow = 0;
+
         void Destroy(VkDevice device) {
             mesh->vertexBuffer.Destroy(device);
             mesh->indexBuffer.Destroy(device);
@@ -96,7 +98,7 @@ public:
         uint64_t vertexBufferAddress;
         uint32_t materialIndex;
         //memory alignment:4+8byte
-        uint32_t padding0 = 0;
+        uint32_t useShadow = 0;
         uint64_t padding1 = 0;
     };
 

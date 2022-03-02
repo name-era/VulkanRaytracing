@@ -50,20 +50,36 @@ void main() {
         if(dotNL > 0) {
             color += PhongSpecular(worldNormal, - toLightDir, toEyeDir, material.specular);
         }
-        //shadow
-        if(ubo.shaderFlags == 1){
-            //point light
-            vec3 toPointLightDir = ubo.pointLightPosition.xyz - worldPos.xyz;
-            if(ShootShadowRay(worldPos, toPointLightDir, 0)){
-                color*=0.8;
-            }
-        }else{
-            //directional light
-            if(ShootShadowRay(worldPos, toLightDir, 0)){
-                color*=0.1;
+        
+        if(primMesh.useShadow == 1){
+            //shadow
+            if(ubo.shaderFlags == 1){
+                //point light
+                vec3 toPointLightDir = ubo.pointLightPosition.xyz - worldPos.xyz;
+                vec3 perpL = cross(toPointLightDir, vec3(0, 1, 0));
+                if(all(equal(perpL, vec3(0.0)))) {
+                    perpL.x = 1.0;
+                }
+                float radius = 1.0;
+                vec3 toLightEdge = normalize((ubo.pointLightPosition.xyz + perpL * radius) - worldPos.xyz);
+                float coneAngle = acos(dot(toPointLightDir, toLightEdge));
+                uint randSeed = randomU(worldPos.xz * 0.1);
+                bool isShadow = false;
+                for(int i = 0; i < 5 ; i++){
+                    vec3 rayDirection = getConeSample(randSeed, toPointLightDir, coneAngle);
+                    isShadow = isShadow || ShootShadowRay(worldPos, rayDirection, 0);
+                }
+                if(isShadow){
+                    color*=0.8;
+                } 
+
+            }else{
+                //directional light
+                if(ShootShadowRay(worldPos, toLightDir, 0)){
+                    color*=0.8;
+                }
             }
         }
-
     }
     //metal
     if(material.materialType == 1) {

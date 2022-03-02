@@ -2452,19 +2452,22 @@ void AppBase::CreateBLAS() {
 
 void AppBase::CreateSceneObject() {
     //glTF model
-    r_gltfModel.transform = glm::mat4(1.0f);
+    r_gltfModel.transform = glm::translate(glm::mat4(1.0f), glm::vec3(-5.0f, -1.0f, 0.0f));
     r_gltfModel.mesh = r_meshGlTF;
     r_gltfModel.material.materialType = LAMBERT;
+    r_gltfModel.useShadow = false;
 
     //ceiling
     r_ceiling.transform = glm::mat4(1.0f);
     r_ceiling.mesh = r_meshPlane;
     r_ceiling.material.textureIndex = TexID_Floor;
+    r_ceiling.useShadow = true;
 
     //sphere
-    r_sphere.transform = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
+    r_sphere.transform = glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 0.0f, 0.0f));
     r_sphere.mesh = r_meshSphere;
     r_sphere.material.materialType = METAL;
+    r_sphere.useShadow = false;
 
     r_sceneObjects.clear();
     r_sceneObjects.push_back(r_gltfModel);
@@ -2532,6 +2535,7 @@ void AppBase::CreateSceneBuffers() {
         objParam.indexBufferAddress = mesh->indexBuffer.GetBufferDeviceAddress(_vulkanDevice->_device);
         //one scene obj has one material
         objParam.materialIndex = uint32_t(materialParams.size());
+        objParam.useShadow = obj.useShadow;
         objParams.push_back(objParam);
         materialParams.push_back(obj.material);
     }
