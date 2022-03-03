@@ -55,7 +55,7 @@ void main() {
             //shadow
             if(ubo.shaderFlags == 1){
                 //point light
-                vec3 toPointLightDir = ubo.pointLightPosition.xyz - worldPos.xyz;
+                vec3 toPointLightDir = normalize(ubo.pointLightPosition.xyz - worldPos.xyz);
                 vec3 perpL = cross(toPointLightDir, vec3(0, 1, 0));
                 if(all(equal(perpL, vec3(0.0)))) {
                     perpL.x = 1.0;

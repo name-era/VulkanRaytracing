@@ -86,8 +86,8 @@ mat3 angleAxis3x3(float angle, vec3 axis) {
 }
 
 vec3 getConeSample(inout uint randSeed, vec3 direction, float coneAngle){
-    float cosAngle=cos(coneAngle);
-    const float PI=3.1415926535;
+    float cosAngle = cos(coneAngle);
+    const float PI = 3.1415926535;
 
     //cos～1
     float z = nextRand(randSeed) * (1.0f - cosAngle) + cosAngle;
