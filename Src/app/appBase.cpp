@@ -1760,6 +1760,7 @@ void AppBase::BuildCommandBuffers(uint32_t index, bool renderImgui) {
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
         throw std::runtime_error("failed to begin recording command buffer!");
     }
+    UpdateTLAS(commandBuffer);
 
     vkCmdSetCheckpointNV(commandBuffer, "Raytrace");
 
@@ -2678,7 +2679,6 @@ void AppBase::UpdateTLAS(VkCommandBuffer commandBuffer) {
     geometryInfo.geometry.instances.arrayOfPointers = VK_FALSE;
     geometryInfo.geometry.instances.data = instanceDataDeviceAddress;
     VkBuildAccelerationStructureFlagsKHR buildFlags = VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
-    r_topLevelAS->CreateAccelerationStructureBuffer(VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, geometryInfo, uint32_t(instances.size()), buildFlags);
     r_topLevelAS->Update(commandBuffer, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, geometryInfo, uint32_t(instances.size()), buildFlags);
 }
 

@@ -32,10 +32,17 @@ void main() {
     Material material = materials[nonuniformEXT(materialIndex)];
 
     //lighting
-    vec3 toLightDir = normalize(- ubo.lightDirection.xyz);
+    vec3 toLightDir;
+    if(ubo.shaderFlags == 1){
+        //現状無限遠まで届く点光源ということにしておく
+        toLightDir= normalize(ubo.pointLightPosition.xyz - worldPos.xyz);
+    }else{
+        toLightDir= normalize(- ubo.lightDirection.xyz);
+    }
+
     vec3 lightColor = ubo.lightColor.xyz;
     float dotNL = dot(worldNormal, toLightDir);
-
+    
     vec3 albedo = material.diffuse.xyz;
     if(material.textureIndex > - 1) {
         albedo = texture(textures[nonuniformEXT(material.textureIndex)], vertex.uv).xyz;
@@ -48,7 +55,7 @@ void main() {
         vec3 toEyeDir = normalize(ubo.cameraPosition.xyz - worldPos);
         color = LambertLight(worldNormal, toLightDir, albedo, lightColor, ubo.ambientColor.xyz);
         if(dotNL > 0) {
-            color += PhongSpecular(worldNormal, - toLightDir, toEyeDir, material.specular);
+            color += PhongSpecular(worldNormal, -toLightDir, toEyeDir, material.specular);
         }
         
         if(primMesh.useShadow == 1){
