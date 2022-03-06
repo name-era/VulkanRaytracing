@@ -32,12 +32,14 @@ public:
 
     AccelerationStructure(){};
     AccelerationStructure(VulkanDevice* device);
-    void CreateAccelerationStructureBuffer(VkAccelerationStructureTypeKHR type, VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount);
+    void Update(VkCommandBuffer commandBuffer, VkAccelerationStructureTypeKHR type, VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount, VkBuildAccelerationStructureFlagsKHR flags = 0);
+    void CreateAccelerationStructureBuffer(VkAccelerationStructureTypeKHR type, VkAccelerationStructureGeometryKHR geometryInfo, uint32_t primitiveCount, VkBuildAccelerationStructureFlagsKHR flags = 0);
     void Destroy();
     
     VkAccelerationStructureKHR handle = VK_NULL_HANDLE;
     uint64_t deviceAddress = 0;
     vk::Buffer asBuffer;
+    vk::Buffer updateBuffer;
 
 private:
     VulkanDevice* vulkanDevice = VK_NULL_HANDLE;
@@ -51,7 +53,7 @@ public:
     struct PolygonMesh {
 
         PolygonMesh(VulkanDevice* vulkandevice, vk::Buffer& vertBuffer, vk::Buffer& idxBuffer, uint32_t stride);
-        void BuildBLAS(VulkanDevice* vulkanDevice);
+        void BuildBLAS(VulkanDevice* vulkanDevice, VkBuildAccelerationStructureFlagsKHR flags = 0);
         
         AccelerationStructure* blas;
         vk::Buffer vertexBuffer;
@@ -237,79 +239,31 @@ public:
 
     vk::Image Create2DTexture(const wchar_t* fileNames, VkImageUsageFlags usage, VkMemoryPropertyFlags memProps);
 
-    /**
-    * @brief    メッシュを構築する
-    */
+
     void PrepareMesh();
-
-    /**
-    * @brief    使用するテクスチャを構築する
-    */
     void PrepareTexture();
-
-    /**
-    * @brief    BLASを構築する
-    */
     void CreateBLAS();
-
-    /**
-    * @brief    シーンオブジェクトを作成する
-    */
     void CreateSceneObject();
     void UpdateMaterialsBuffer();
-    /**
-    * @brief    シーンのオブジェクト情報のバッファを作成する
-    */
     void CreateSceneBuffers();
 
-    /**
-    * @brief    TRASを構築する
-    */
+    void UpdateTLAS(VkCommandBuffer commandBuffer);
     void CreateTLAS();
 
-    /**
-    * @brief    Strage Imageを構築する
-    */
     void CreateStrageImage();
 
-    /**
-    * @brief    ユニフォームバッファを更新する
-    */
     void UpdateUniformBuffer();
-    
-    /**
-    * @brief    動的ユニフォームバッファを作成する（あとでストレージバッファにも対応）
-    */
     void CreateUniformBuffer();
 
-    /**
-    * @brief    レイトレーシング用ディスクリプタセットレイアウト、パイプラインレイアウトを作成する
-    */
     void CreateRaytracingLayout();
-
-    /**
-    * @brief    レイトレーシング用パイプラインを作成する
-    */
     void CreateRaytracingPipeline();
 
-    /**
-    * @brief    レイトレーシング用パイプラインプロパティを取得する
-    */
     VkPhysicalDeviceRayTracingPipelinePropertiesKHR GetRayTracingPipelineProperties();
 
-    /**
-    * @brief    シェーダーのバインディングテーブルを作成する
-    */
     void CreateShaderBindingTable();
 
-    /**
-    * @brief    ディスクリプタセットを作成する
-    */
     void CreateDescriptorSets();
 
-    /**
-    * @brief    レイトレーシング初期化
-    */
     void InitRayTracing();
 
     /*******************************************************************************************************************
